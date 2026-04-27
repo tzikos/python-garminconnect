@@ -1,0 +1,107 @@
+"""SQLAlchemy ORM models for the coach app.
+
+Design notes:
+- UserProfile is effectively a singleton for the local-script phase (id=1).
+- A ScheduledWorkout stores a primitive_type + primitive_params JSON envelope.
+  The actual conversion to a Garmin workout happens at sync time via the
+  registry in coach.primitives. This keeps the DB sport-agnostic and makes
+  manual editing (json.dumps -> edit -> reload) straightforward.
+- Strength sessions live inside primitive_params for now; a separate movement
+  library / progression tracker will be added once we have a real use case.
+"""
+
+from __future__ import annotations
+
+from datetime import date, datetime
+from typing import Any
+
+from sqlalchemy import JSON, Date, DateTime, ForeignKey, String, Text, func
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+
+
+class Base(DeclarativeBase):
+    """Declarative base for all ORM models."""
+
+
+class UserProfile(Base):
+    """The local user. Singleton row (id=1) for now."""
+
+    __tablename__ = "user_profile"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(120))
+    garmin_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    # Fitness benchmarks (all optional; populated via `coach profile set`)
+    recent_5k_seconds: Mapped[int | None] = mapped_column(nullable=True)
+    threshold_hr: Mapped[int | None] = mapped_column(nullable=True)
+    max_hr: Mapped[int | None] = mapped_column(nullable=True)
+
+    # Scheduling preferences (JSON: e.g. {"running": [1, 3, 5], "strength": [2, 4]}
+    # where 0 = Monday)
+    preferred_days: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    weekly_hours_target: Mapped[float | None] = mapped_column(nullable=True)
+
+    # Free-form context the LLM gets verbatim (injuries, equipment, etc.)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class Plan(Base):
+    """A training plan over a date range, targeting a goal."""
+
+    __tablename__ = "plan"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(200))
+    goal_text: Mapped[str] = mapped_column(Text)
+    start_date: Mapped[date] = mapped_column(Date)
+    end_date: Mapped[date] = mapped_column(Date)
+    status: Mapped[str] = mapped_column(String(20), default="draft")
+    version: Mapped[int] = mapped_column(default=1)
+
+    # Free-form structure the LLM produces (week-level themes, weekly volume
+    # targets per sport). Schema deliberately loose.
+    structure: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=False
+    )
+
+    workouts: Mapped[list[ScheduledWorkout]] = relationship(
+        back_populates="plan", cascade="all, delete-orphan"
+    )
+
+
+class ScheduledWorkout(Base):
+    """One workout placed on a date, ready for review and Garmin upload."""
+
+    __tablename__ = "scheduled_workout"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    plan_id: Mapped[int] = mapped_column(ForeignKey("plan.id"))
+    date: Mapped[date] = mapped_column(Date, index=True)
+    week_number: Mapped[int] = mapped_column(default=1)
+    sport: Mapped[str] = mapped_column(String(32))  # "running", "strength", ...
+    title: Mapped[str] = mapped_column(String(200))
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # The primitive registry key (e.g. "easy_run") + its kwargs.
+    # primitives.PRIMITIVES[primitive_type](**primitive_params) -> Garmin workout.
+    primitive_type: Mapped[str] = mapped_column(String(64))
+    primitive_params: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+
+    # Set after upload to Garmin.
+    garmin_workout_id: Mapped[int | None] = mapped_column(nullable=True)
+    garmin_schedule_id: Mapped[int | None] = mapped_column(nullable=True)
+
+    status: Mapped[str] = mapped_column(String(20), default="planned")
+    # planned -> uploaded -> completed (phase 2)
+
+    plan: Mapped[Plan] = relationship(back_populates="workouts")

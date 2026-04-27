@@ -1,0 +1,904 @@
+{
+  "name": "Sub-1:45 Half Marathon Build",
+  "goal_text": "Sub-1:45 half marathon + calisthenics",
+  "start_date": "2026-05-20",
+  "end_date": "2026-07-20",
+  "status": "draft",
+  "weekly_structure": [
+    {
+      "week_number": 1,
+      "theme": "Base building",
+      "target_volume_km": 25.0,
+      "workouts": [
+        {
+          "date": "2026-05-20",
+          "sport": "running",
+          "primitive_type": "easy_run",
+          "primitive_params": {
+            "duration_min": 60,
+            "target_pace_min_per_km": 338,
+            "target_pace_max_per_km": 378
+          },
+          "title": "Easy Mon",
+          "description": "Steady aerobic run"
+        },
+        {
+          "date": "2026-05-21",
+          "sport": "strength",
+          "primitive_type": "strength_session",
+          "primitive_params": {
+            "duration_min": 60,
+            "exercises": [
+              {
+                "name": "Pull\u2011ups",
+                "sets": 4,
+                "reps": "8-10",
+                "weight": "BW",
+                "rest": "2min"
+              },
+              {
+                "name": "Push\u2011ups",
+                "sets": 4,
+                "reps": "12-15",
+                "weight": "BW",
+                "rest": "90sec"
+              },
+              {
+                "name": "Bulgarian Split Squat",
+                "sets": 3,
+                "reps": "8",
+                "weight": "RPE 7",
+                "rest": "2min"
+              }
+            ]
+          },
+          "title": "Calisthenics Tue",
+          "description": "Upper\u2011body & core strength, no heavy lower\u2011body before long run"
+        },
+        {
+          "date": "2026-05-22",
+          "sport": "running",
+          "primitive_type": "interval_session",
+          "primitive_params": {
+            "reps": 5,
+            "work_min": 3,
+            "recovery_min": 2,
+            "warmup_min": 15,
+            "cooldown_min": 10,
+            "work_pace_min_per_km": 259,
+            "work_pace_max_per_km": 270,
+            "recovery_pace_min_per_km": 338,
+            "recovery_pace_max_per_km": 378
+          },
+          "title": "Intervals Wed",
+          "description": "5\u00d73' @ interval pace"
+        },
+        {
+          "date": "2026-05-23",
+          "sport": "running",
+          "primitive_type": "easy_run",
+          "primitive_params": {
+            "duration_min": 45,
+            "target_pace_min_per_km": 338,
+            "target_pace_max_per_km": 378
+          },
+          "title": "Easy Thu",
+          "description": "Recovery run"
+        },
+        {
+          "date": "2026-05-24",
+          "sport": "running",
+          "primitive_type": "long_run",
+          "primitive_params": {
+            "duration_min": 80,
+            "target_pace_min_per_km": 349,
+            "target_pace_max_per_km": 357
+          },
+          "title": "Long Sat",
+          "description": "Steady long run"
+        },
+        {
+          "date": "2026-05-25",
+          "sport": "running",
+          "primitive_type": "easy_run",
+          "primitive_params": {
+            "duration_min": 30,
+            "target_pace_min_per_km": 338,
+            "target_pace_max_per_km": 378
+          },
+          "title": "Easy Sun",
+          "description": "Optional easy jog"
+        }
+      ]
+    },
+    {
+      "week_number": 2,
+      "theme": "Base building",
+      "target_volume_km": 28.0,
+      "workouts": [
+        {
+          "date": "2026-05-27",
+          "sport": "running",
+          "primitive_type": "easy_run",
+          "primitive_params": {
+            "duration_min": 65,
+            "target_pace_min_per_km": 338,
+            "target_pace_max_per_km": 378
+          },
+          "title": "Easy Mon",
+          "description": "Steady aerobic run"
+        },
+        {
+          "date": "2026-05-28",
+          "sport": "strength",
+          "primitive_type": "strength_session",
+          "primitive_params": {
+            "duration_min": 60,
+            "exercises": [
+              {
+                "name": "Dips",
+                "sets": 4,
+                "reps": "8-10",
+                "weight": "BW",
+                "rest": "2min"
+              },
+              {
+                "name": "Inverted Rows",
+                "sets": 4,
+                "reps": "10-12",
+                "weight": "BW",
+                "rest": "90sec"
+              },
+              {
+                "name": "Pistol Squat",
+                "sets": 3,
+                "reps": "5",
+                "weight": "BW",
+                "rest": "2min"
+              }
+            ]
+          },
+          "title": "Calisthenics Tue",
+          "description": "Maintain upper\u2011body strength, avoid heavy legs"
+        },
+        {
+          "date": "2026-05-29",
+          "sport": "running",
+          "primitive_type": "tempo_run",
+          "primitive_params": {
+            "tempo_min": 20,
+            "warmup_min": 15,
+            "cooldown_min": 10,
+            "tempo_pace_min_per_km": 281,
+            "tempo_pace_max_per_km": 289
+          },
+          "title": "Tempo Wed",
+          "description": "20' @ threshold pace"
+        },
+        {
+          "date": "2026-05-30",
+          "sport": "running",
+          "primitive_type": "easy_run",
+          "primitive_params": {
+            "duration_min": 45,
+            "target_pace_min_per_km": 338,
+            "target_pace_max_per_km": 378
+          },
+          "title": "Easy Thu",
+          "description": "Recovery run"
+        },
+        {
+          "date": "2026-05-31",
+          "sport": "running",
+          "primitive_type": "long_run",
+          "primitive_params": {
+            "duration_min": 95,
+            "target_pace_min_per_km": 349,
+            "target_pace_max_per_km": 357
+          },
+          "title": "Long Sat",
+          "description": "Long steady run"
+        },
+        {
+          "date": "2026-06-01",
+          "sport": "running",
+          "primitive_type": "easy_run",
+          "primitive_params": {
+            "duration_min": 30,
+            "target_pace_min_per_km": 338,
+            "target_pace_max_per_km": 378
+          },
+          "title": "Easy Sun",
+          "description": "Optional easy jog"
+        }
+      ]
+    },
+    {
+      "week_number": 3,
+      "theme": "Build",
+      "target_volume_km": 31.0,
+      "workouts": [
+        {
+          "date": "2026-06-03",
+          "sport": "running",
+          "primitive_type": "easy_run",
+          "primitive_params": {
+            "duration_min": 70,
+            "target_pace_min_per_km": 338,
+            "target_pace_max_per_km": 378
+          },
+          "title": "Easy Mon",
+          "description": "Aerobic run"
+        },
+        {
+          "date": "2026-06-04",
+          "sport": "strength",
+          "primitive_type": "strength_session",
+          "primitive_params": {
+            "duration_min": 60,
+            "exercises": [
+              {
+                "name": "Pull\u2011ups",
+                "sets": 4,
+                "reps": "8-10",
+                "weight": "BW",
+                "rest": "2min"
+              },
+              {
+                "name": "Push\u2011ups",
+                "sets": 4,
+                "reps": "12-15",
+                "weight": "BW",
+                "rest": "90sec"
+              },
+              {
+                "name": "Step\u2011up",
+                "sets": 3,
+                "reps": "10",
+                "weight": "RPE 7",
+                "rest": "2min"
+              }
+            ]
+          },
+          "title": "Calisthenics Tue",
+          "description": "Maintain strength, avoid heavy legs before hard run"
+        },
+        {
+          "date": "2026-06-05",
+          "sport": "running",
+          "primitive_type": "interval_session",
+          "primitive_params": {
+            "reps": 6,
+            "work_min": 3,
+            "recovery_min": 2,
+            "warmup_min": 15,
+            "cooldown_min": 10,
+            "work_pace_min_per_km": 259,
+            "work_pace_max_per_km": 270,
+            "recovery_pace_min_per_km": 338,
+            "recovery_pace_max_per_km": 378
+          },
+          "title": "Intervals Wed",
+          "description": "6\u00d73' @ interval pace"
+        },
+        {
+          "date": "2026-06-06",
+          "sport": "running",
+          "primitive_type": "easy_run",
+          "primitive_params": {
+            "duration_min": 45,
+            "target_pace_min_per_km": 338,
+            "target_pace_max_per_km": 378
+          },
+          "title": "Easy Thu",
+          "description": "Recovery jog"
+        },
+        {
+          "date": "2026-06-07",
+          "sport": "running",
+          "primitive_type": "long_run",
+          "primitive_params": {
+            "duration_min": 105,
+            "target_pace_min_per_km": 349,
+            "target_pace_max_per_km": 357
+          },
+          "title": "Long Sat",
+          "description": "Long run, marathon pace focus"
+        },
+        {
+          "date": "2026-06-08",
+          "sport": "running",
+          "primitive_type": "easy_run",
+          "primitive_params": {
+            "duration_min": 30,
+            "target_pace_min_per_km": 338,
+            "target_pace_max_per_km": 378
+          },
+          "title": "Easy Sun",
+          "description": "Optional easy jog"
+        }
+      ]
+    },
+    {
+      "week_number": 4,
+      "theme": "Deload",
+      "target_volume_km": 21.7,
+      "workouts": [
+        {
+          "date": "2026-06-10",
+          "sport": "running",
+          "primitive_type": "easy_run",
+          "primitive_params": {
+            "duration_min": 55,
+            "target_pace_min_per_km": 338,
+            "target_pace_max_per_km": 378
+          },
+          "title": "Easy Mon",
+          "description": "Reduced volume"
+        },
+        {
+          "date": "2026-06-11",
+          "sport": "strength",
+          "primitive_type": "strength_session",
+          "primitive_params": {
+            "duration_min": 45,
+            "exercises": [
+              {
+                "name": "Dips",
+                "sets": 3,
+                "reps": "8-10",
+                "weight": "BW",
+                "rest": "2min"
+              },
+              {
+                "name": "Inverted Rows",
+                "sets": 3,
+                "reps": "10-12",
+                "weight": "BW",
+                "rest": "90sec"
+              }
+            ]
+          },
+          "title": "Calisthenics Tue",
+          "description": "Maintain strength, lower volume"
+        },
+        {
+          "date": "2026-06-12",
+          "sport": "running",
+          "primitive_type": "tempo_run",
+          "primitive_params": {
+            "tempo_min": 15,
+            "warmup_min": 15,
+            "cooldown_min": 10,
+            "tempo_pace_min_per_km": 281,
+            "tempo_pace_max_per_km": 289
+          },
+          "title": "Tempo Wed",
+          "description": "15' @ threshold"
+        },
+        {
+          "date": "2026-06-13",
+          "sport": "running",
+          "primitive_type": "easy_run",
+          "primitive_params": {
+            "duration_min": 40,
+            "target_pace_min_per_km": 338,
+            "target_pace_max_per_km": 378
+          },
+          "title": "Easy Thu",
+          "description": "Recovery"
+        },
+        {
+          "date": "2026-06-14",
+          "sport": "running",
+          "primitive_type": "long_run",
+          "primitive_params": {
+            "duration_min": 80,
+            "target_pace_min_per_km": 349,
+            "target_pace_max_per_km": 357
+          },
+          "title": "Long Sat",
+          "description": "Reduced long run"
+        }
+      ]
+    },
+    {
+      "week_number": 5,
+      "theme": "Build",
+      "target_volume_km": 34.0,
+      "workouts": [
+        {
+          "date": "2026-06-17",
+          "sport": "running",
+          "primitive_type": "easy_run",
+          "primitive_params": {
+            "duration_min": 70,
+            "target_pace_min_per_km": 338,
+            "target_pace_max_per_km": 378
+          },
+          "title": "Easy Mon",
+          "description": "Aerobic run"
+        },
+        {
+          "date": "2026-06-18",
+          "sport": "strength",
+          "primitive_type": "strength_session",
+          "primitive_params": {
+            "duration_min": 60,
+            "exercises": [
+              {
+                "name": "Pull\u2011ups",
+                "sets": 4,
+                "reps": "8-10",
+                "weight": "BW",
+                "rest": "2min"
+              },
+              {
+                "name": "Push\u2011ups",
+                "sets": 4,
+                "reps": "12-15",
+                "weight": "BW",
+                "rest": "90sec"
+              },
+              {
+                "name": "Bulgarian Split Squat",
+                "sets": 3,
+                "reps": "8",
+                "weight": "RPE 7",
+                "rest": "2min"
+              }
+            ]
+          },
+          "title": "Calisthenics Tue",
+          "description": "Strength maintenance"
+        },
+        {
+          "date": "2026-06-19",
+          "sport": "running",
+          "primitive_type": "tempo_run",
+          "primitive_params": {
+            "tempo_min": 25,
+            "warmup_min": 15,
+            "cooldown_min": 10,
+            "tempo_pace_min_per_km": 281,
+            "tempo_pace_max_per_km": 289
+          },
+          "title": "Tempo Wed",
+          "description": "25' @ threshold"
+        },
+        {
+          "date": "2026-06-20",
+          "sport": "running",
+          "primitive_type": "easy_run",
+          "primitive_params": {
+            "duration_min": 45,
+            "target_pace_min_per_km": 338,
+            "target_pace_max_per_km": 378
+          },
+          "title": "Easy Thu",
+          "description": "Recovery jog"
+        },
+        {
+          "date": "2026-06-21",
+          "sport": "running",
+          "primitive_type": "long_run",
+          "primitive_params": {
+            "duration_min": 115,
+            "target_pace_min_per_km": 349,
+            "target_pace_max_per_km": 357
+          },
+          "title": "Long Sat",
+          "description": "Long run, marathon pace"
+        },
+        {
+          "date": "2026-06-22",
+          "sport": "running",
+          "primitive_type": "easy_run",
+          "primitive_params": {
+            "duration_min": 30,
+            "target_pace_min_per_km": 338,
+            "target_pace_max_per_km": 378
+          },
+          "title": "Easy Sun",
+          "description": "Optional easy jog"
+        }
+      ]
+    },
+    {
+      "week_number": 6,
+      "theme": "Build",
+      "target_volume_km": 37.0,
+      "workouts": [
+        {
+          "date": "2026-06-24",
+          "sport": "running",
+          "primitive_type": "easy_run",
+          "primitive_params": {
+            "duration_min": 75,
+            "target_pace_min_per_km": 338,
+            "target_pace_max_per_km": 378
+          },
+          "title": "Easy Mon",
+          "description": "Aerobic run"
+        },
+        {
+          "date": "2026-06-25",
+          "sport": "strength",
+          "primitive_type": "strength_session",
+          "primitive_params": {
+            "duration_min": 60,
+            "exercises": [
+              {
+                "name": "Dips",
+                "sets": 4,
+                "reps": "8-10",
+                "weight": "BW",
+                "rest": "2min"
+              },
+              {
+                "name": "Inverted Rows",
+                "sets": 4,
+                "reps": "10-12",
+                "weight": "BW",
+                "rest": "90sec"
+              },
+              {
+                "name": "Step\u2011up",
+                "sets": 3,
+                "reps": "10",
+                "weight": "RPE 7",
+                "rest": "2min"
+              }
+            ]
+          },
+          "title": "Calisthenics Tue",
+          "description": "Strength maintenance"
+        },
+        {
+          "date": "2026-06-26",
+          "sport": "running",
+          "primitive_type": "interval_session",
+          "primitive_params": {
+            "reps": 7,
+            "work_min": 3,
+            "recovery_min": 2,
+            "warmup_min": 15,
+            "cooldown_min": 10,
+            "work_pace_min_per_km": 259,
+            "work_pace_max_per_km": 270,
+            "recovery_pace_min_per_km": 338,
+            "recovery_pace_max_per_km": 378
+          },
+          "title": "Intervals Wed",
+          "description": "7\u00d73' @ interval pace"
+        },
+        {
+          "date": "2026-06-27",
+          "sport": "running",
+          "primitive_type": "easy_run",
+          "primitive_params": {
+            "duration_min": 45,
+            "target_pace_min_per_km": 338,
+            "target_pace_max_per_km": 378
+          },
+          "title": "Easy Thu",
+          "description": "Recovery jog"
+        },
+        {
+          "date": "2026-06-28",
+          "sport": "running",
+          "primitive_type": "long_run",
+          "primitive_params": {
+            "duration_min": 125,
+            "target_pace_min_per_km": 349,
+            "target_pace_max_per_km": 357
+          },
+          "title": "Long Sat",
+          "description": "Long run, marathon pace"
+        },
+        {
+          "date": "2026-06-29",
+          "sport": "running",
+          "primitive_type": "easy_run",
+          "primitive_params": {
+            "duration_min": 30,
+            "target_pace_min_per_km": 338,
+            "target_pace_max_per_km": 378
+          },
+          "title": "Easy Sun",
+          "description": "Optional easy jog"
+        }
+      ]
+    },
+    {
+      "week_number": 7,
+      "theme": "Peak",
+      "target_volume_km": 40.0,
+      "workouts": [
+        {
+          "date": "2026-07-01",
+          "sport": "running",
+          "primitive_type": "easy_run",
+          "primitive_params": {
+            "duration_min": 80,
+            "target_pace_min_per_km": 338,
+            "target_pace_max_per_km": 378
+          },
+          "title": "Easy Mon",
+          "description": "Aerobic run"
+        },
+        {
+          "date": "2026-07-02",
+          "sport": "strength",
+          "primitive_type": "strength_session",
+          "primitive_params": {
+            "duration_min": 60,
+            "exercises": [
+              {
+                "name": "Pull\u2011ups",
+                "sets": 4,
+                "reps": "8-10",
+                "weight": "BW",
+                "rest": "2min"
+              },
+              {
+                "name": "Push\u2011ups",
+                "sets": 4,
+                "reps": "12-15",
+                "weight": "BW",
+                "rest": "90sec"
+              },
+              {
+                "name": "Bulgarian Split Squat",
+                "sets": 3,
+                "reps": "8",
+                "weight": "RPE 7",
+                "rest": "2min"
+              }
+            ]
+          },
+          "title": "Calisthenics Tue",
+          "description": "Strength maintenance before race"
+        },
+        {
+          "date": "2026-07-03",
+          "sport": "running",
+          "primitive_type": "tempo_run",
+          "primitive_params": {
+            "tempo_min": 30,
+            "warmup_min": 15,
+            "cooldown_min": 10,
+            "tempo_pace_min_per_km": 281,
+            "tempo_pace_max_per_km": 289
+          },
+          "title": "Tempo Wed",
+          "description": "30' @ threshold"
+        },
+        {
+          "date": "2026-07-04",
+          "sport": "running",
+          "primitive_type": "easy_run",
+          "primitive_params": {
+            "duration_min": 45,
+            "target_pace_min_per_km": 338,
+            "target_pace_max_per_km": 378
+          },
+          "title": "Easy Thu",
+          "description": "Recovery jog"
+        },
+        {
+          "date": "2026-07-05",
+          "sport": "running",
+          "primitive_type": "long_run",
+          "primitive_params": {
+            "duration_min": 135,
+            "target_pace_min_per_km": 349,
+            "target_pace_max_per_km": 357
+          },
+          "title": "Long Sat",
+          "description": "Peak long run"
+        },
+        {
+          "date": "2026-07-06",
+          "sport": "running",
+          "primitive_type": "easy_run",
+          "primitive_params": {
+            "duration_min": 30,
+            "target_pace_min_per_km": 338,
+            "target_pace_max_per_km": 378
+          },
+          "title": "Easy Sun",
+          "description": "Optional easy jog"
+        }
+      ]
+    },
+    {
+      "week_number": 8,
+      "theme": "Taper",
+      "target_volume_km": 28.0,
+      "workouts": [
+        {
+          "date": "2026-07-08",
+          "sport": "running",
+          "primitive_type": "easy_run",
+          "primitive_params": {
+            "duration_min": 60,
+            "target_pace_min_per_km": 338,
+            "target_pace_max_per_km": 378
+          },
+          "title": "Easy Mon",
+          "description": "Reduced volume"
+        },
+        {
+          "date": "2026-07-09",
+          "sport": "strength",
+          "primitive_type": "strength_session",
+          "primitive_params": {
+            "duration_min": 45,
+            "exercises": [
+              {
+                "name": "Dips",
+                "sets": 3,
+                "reps": "8-10",
+                "weight": "BW",
+                "rest": "2min"
+              },
+              {
+                "name": "Inverted Rows",
+                "sets": 3,
+                "reps": "10-12",
+                "weight": "BW",
+                "rest": "90sec"
+              }
+            ]
+          },
+          "title": "Calisthenics Tue",
+          "description": "Maintain upper body, low volume"
+        },
+        {
+          "date": "2026-07-10",
+          "sport": "running",
+          "primitive_type": "tempo_run",
+          "primitive_params": {
+            "tempo_min": 15,
+            "warmup_min": 15,
+            "cooldown_min": 10,
+            "tempo_pace_min_per_km": 281,
+            "tempo_pace_max_per_km": 289
+          },
+          "title": "Tempo Wed",
+          "description": "15' @ threshold"
+        },
+        {
+          "date": "2026-07-11",
+          "sport": "running",
+          "primitive_type": "easy_run",
+          "primitive_params": {
+            "duration_min": 40,
+            "target_pace_min_per_km": 338,
+            "target_pace_max_per_km": 378
+          },
+          "title": "Easy Thu",
+          "description": "Recovery jog"
+        },
+        {
+          "date": "2026-07-12",
+          "sport": "running",
+          "primitive_type": "long_run",
+          "primitive_params": {
+            "duration_min": 90,
+            "target_pace_min_per_km": 349,
+            "target_pace_max_per_km": 357
+          },
+          "title": "Long Sat",
+          "description": "Reduced long run"
+        },
+        {
+          "date": "2026-07-13",
+          "sport": "running",
+          "primitive_type": "easy_run",
+          "primitive_params": {
+            "duration_min": 30,
+            "target_pace_min_per_km": 338,
+            "target_pace_max_per_km": 378
+          },
+          "title": "Easy Sun",
+          "description": "Optional easy jog"
+        }
+      ]
+    },
+    {
+      "week_number": 9,
+      "theme": "Race Week",
+      "target_volume_km": 20.0,
+      "workouts": [
+        {
+          "date": "2026-07-15",
+          "sport": "running",
+          "primitive_type": "easy_run",
+          "primitive_params": {
+            "duration_min": 45,
+            "target_pace_min_per_km": 338,
+            "target_pace_max_per_km": 378
+          },
+          "title": "Easy Mon",
+          "description": "Pre\u2011race shake\u2011out"
+        },
+        {
+          "date": "2026-07-16",
+          "sport": "strength",
+          "primitive_type": "strength_session",
+          "primitive_params": {
+            "duration_min": 30,
+            "exercises": [
+              {
+                "name": "Pull\u2011ups",
+                "sets": 2,
+                "reps": "8",
+                "weight": "BW",
+                "rest": "2min"
+              },
+              {
+                "name": "Push\u2011ups",
+                "sets": 2,
+                "reps": "12",
+                "weight": "BW",
+                "rest": "90sec"
+              }
+            ]
+          },
+          "title": "Calisthenics Tue",
+          "description": "Maintain activation, minimal fatigue"
+        },
+        {
+          "date": "2026-07-17",
+          "sport": "running",
+          "primitive_type": "tempo_run",
+          "primitive_params": {
+            "tempo_min": 10,
+            "warmup_min": 15,
+            "cooldown_min": 10,
+            "tempo_pace_min_per_km": 281,
+            "tempo_pace_max_per_km": 289
+          },
+          "title": "Tempo Wed",
+          "description": "10' @ threshold"
+        },
+        {
+          "date": "2026-07-18",
+          "sport": "running",
+          "primitive_type": "easy_run",
+          "primitive_params": {
+            "duration_min": 30,
+            "target_pace_min_per_km": 338,
+            "target_pace_max_per_km": 378
+          },
+          "title": "Easy Thu",
+          "description": "Light jog"
+        },
+        {
+          "date": "2026-07-19",
+          "sport": "running",
+          "primitive_type": "easy_run",
+          "primitive_params": {
+            "duration_min": 20,
+            "target_pace_min_per_km": 338,
+            "target_pace_max_per_km": 378
+          },
+          "title": "Pre\u2011Race Sat",
+          "description": "Very easy jog, stay fresh"
+        },
+        {
+          "date": "2026-07-20",
+          "sport": "running",
+          "primitive_type": "easy_run",
+          "primitive_params": {
+            "duration_min": 0
+          },
+          "title": "Race Day",
+          "description": "Half marathon \u2013 aim sub\u20111:45"
+        }
+      ]
+    }
+  ]
+}
