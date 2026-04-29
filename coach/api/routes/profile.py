@@ -21,6 +21,8 @@ def _to_out(p: UserProfile) -> ProfileOut:
         preferred_days=p.preferred_days or {},
         weekly_hours_target=p.weekly_hours_target,
         notes=p.notes,
+        enabled_sports=p.enabled_sports or [],
+        sport_profiles=p.sport_profiles or {},
     )
 
 

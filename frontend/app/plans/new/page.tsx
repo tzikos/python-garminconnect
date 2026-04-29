@@ -10,6 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { DatePicker } from "@/components/ui/date-picker";
 import { toast } from "sonner";
 
 function nextMonday(): string {
@@ -83,16 +84,16 @@ export default function NewPlanPage() {
       <Card className="mt-4">
         <CardHeader>
           <CardTitle>Window</CardTitle>
-          <CardDescription>Plans run on Monday-start weeks.</CardDescription>
+          <CardDescription>Plans are structured in Monday-start weeks.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-2">
           <div className="grid gap-1">
-            <Label htmlFor="start">Start (Monday)</Label>
-            <Input id="start" type="date" value={start} onChange={(e) => setStart(e.target.value)} />
+            <Label>Start date</Label>
+            <DatePicker value={start} onChange={setStart} placeholder="Pick start date" />
           </div>
           <div className="grid gap-1">
-            <Label htmlFor="end">End (race day)</Label>
-            <Input id="end" type="date" value={end} onChange={(e) => setEnd(e.target.value)} />
+            <Label>End date (race day)</Label>
+            <DatePicker value={end} onChange={setEnd} placeholder="Pick end date" />
           </div>
         </CardContent>
       </Card>

@@ -68,6 +68,8 @@ def generate_plan(
         "preferred_days": prof.preferred_days,
         "weekly_hours_target": prof.weekly_hours_target,
         "notes": prof.notes,
+        "enabled_sports": prof.enabled_sports or [],
+        "sport_profiles": prof.sport_profiles or {},
     }
 
     # Anchor the plan to the Monday of the week containing start_date so the
@@ -94,6 +96,13 @@ def generate_plan(
     parsed = _parse_plan_json(result.content)
     if start_date != anchor_monday:
         _drop_workouts_before(parsed, start_date)
+    _drop_incomplete_workouts(parsed)
+    # If repair dropped a partial trailing week, prune empty weeks so
+    # validation doesn't reject the plan.
+    parsed["weekly_structure"] = [
+        w for w in parsed.get("weekly_structure", [])
+        if w.get("workouts")
+    ]
     validate_plan_dict(parsed)
 
     plan_id, n_workouts = _materialize(parsed, goal_text, start_date, end_date)
@@ -121,6 +130,21 @@ def _drop_workouts_before(plan: dict[str, Any], cutoff: date) -> None:
         ]
 
 
+_REQUIRED_WORKOUT_KEYS = ("date", "sport", "primitive_type", "title")
+
+
+def _drop_incomplete_workouts(plan: dict[str, Any]) -> None:
+    """Drop workouts missing required fields. Aggressive repair may leave
+    a partial workout at the cut point; this prunes it instead of letting
+    validation reject the whole plan.
+    """
+    for week in plan.get("weekly_structure", []):
+        week["workouts"] = [
+            w for w in week.get("workouts", [])
+            if all(w.get(k) for k in _REQUIRED_WORKOUT_KEYS)
+        ]
+
+
 # ----------------------------------------------------------------- parsing
 
 
@@ -131,6 +155,8 @@ def _parse_plan_json(content: str) -> dict[str, Any]:
     """Tolerant JSON extraction.
 
     Handles bare JSON, markdown-fenced JSON, and leading/trailing prose.
+    On parse failure, attempts to repair a truncated JSON response (very
+    common when a free LLM hits its output token cap mid-stream).
     """
     text = content.strip()
 
@@ -146,12 +172,134 @@ def _parse_plan_json(content: str) -> dict[str, Any]:
             raise ValueError(f"No JSON object found in response:\n{content[:400]}")
         text = text[first : last + 1]
 
+    # Pre-process: strip trailing commas (common LLM JSON mistake).
+    text = _strip_trailing_commas(text)
+
     try:
         return json.loads(text)
-    except json.JSONDecodeError as e:
+    except json.JSONDecodeError as first_err:
+        # Aggressive repair: walk every "after a close-bracket" position from
+        # the end of the text backward, balancing brackets and attempting a
+        # parse. Returns the longest prefix that parses.
+        recovered = _aggressive_repair(text)
+        if recovered is not None:
+            return recovered
         raise ValueError(
-            f"Could not parse plan JSON: {e}\n--- raw ---\n{content[:600]}"
-        ) from e
+            f"Could not parse plan JSON: {first_err}\n--- raw ---\n{content[:600]}"
+        ) from first_err
+
+
+def _strip_trailing_commas(text: str) -> str:
+    """Remove trailing commas before `}` or `]`, respecting string literals."""
+    out: list[str] = []
+    in_string = False
+    escape = False
+    i = 0
+    while i < len(text):
+        c = text[i]
+        if escape:
+            escape = False
+            out.append(c)
+            i += 1
+            continue
+        if in_string:
+            if c == "\\":
+                escape = True
+            elif c == '"':
+                in_string = False
+            out.append(c)
+            i += 1
+            continue
+        if c == '"':
+            in_string = True
+            out.append(c)
+            i += 1
+            continue
+        if c == ",":
+            # Peek past whitespace; if next non-ws char closes a struct, drop.
+            j = i + 1
+            while j < len(text) and text[j] in " \t\n\r":
+                j += 1
+            if j < len(text) and text[j] in "}]":
+                i += 1  # skip the comma
+                continue
+        out.append(c)
+        i += 1
+    return "".join(out)
+
+
+def _aggressive_repair(text: str) -> dict[str, Any] | None:
+    """Walk close-bracket positions from latest to earliest; for each, balance
+    open brackets and attempt to parse. Return the first successfully parsed
+    dict, or None if nothing parses.
+
+    Aggressively tolerant — handles arbitrary truncation as long as some
+    prefix of `text` represents a structurally-complete-after-balancing
+    object.
+    """
+    cut_points = _close_bracket_positions(text)
+    for cut in reversed(cut_points):
+        prefix = _strip_trailing_commas(text[:cut].rstrip())
+        if prefix.endswith(","):
+            prefix = prefix[:-1]
+        stack = _open_bracket_stack(prefix)
+        closing = "".join("]" if c == "[" else "}" for c in reversed(stack))
+        candidate = prefix + closing
+        try:
+            parsed = json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(parsed, dict):
+            return parsed
+    return None
+
+
+def _close_bracket_positions(text: str) -> list[int]:
+    """Return positions immediately AFTER each `}` or `]` outside of strings."""
+    positions: list[int] = []
+    in_string = False
+    escape = False
+    for i, c in enumerate(text):
+        if escape:
+            escape = False
+            continue
+        if in_string:
+            if c == "\\":
+                escape = True
+            elif c == '"':
+                in_string = False
+            continue
+        if c == '"':
+            in_string = True
+            continue
+        if c in "}]":
+            positions.append(i + 1)
+    return positions
+
+
+def _open_bracket_stack(text: str) -> list[str]:
+    """Return the unclosed `{`/`[` stack at end of `text`, ignoring strings."""
+    stack: list[str] = []
+    in_string = False
+    escape = False
+    for c in text:
+        if escape:
+            escape = False
+            continue
+        if in_string:
+            if c == "\\":
+                escape = True
+            elif c == '"':
+                in_string = False
+            continue
+        if c == '"':
+            in_string = True
+            continue
+        if c in "{[":
+            stack.append(c)
+        elif c in "}]" and stack:
+            stack.pop()
+    return stack
 
 
 # -------------------------------------------------------------- persistence

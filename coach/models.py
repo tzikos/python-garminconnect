@@ -42,6 +42,15 @@ class UserProfile(Base):
     preferred_days: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     weekly_hours_target: Mapped[float | None] = mapped_column(nullable=True)
 
+    # Sports the user actively trains; drives prompt sections + UI tiles.
+    # e.g. ["running", "strength", "calisthenics"]
+    enabled_sports: Mapped[list[str]] = mapped_column(JSON, default=list)
+
+    # Per-sport benchmarks. Schema deliberately loose so we can extend
+    # without migrations. Top-level keys match values in enabled_sports.
+    # See coach.sports for the canonical field names.
+    sport_profiles: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+
     # Free-form context the LLM gets verbatim (injuries, equipment, etc.)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 

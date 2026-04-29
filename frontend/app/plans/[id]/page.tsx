@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { DeletePlanDialog } from "@/components/delete-plan-dialog";
 import { formatDate } from "@/lib/utils";
 import { toast } from "sonner";
 import Link from "next/link";
@@ -31,6 +32,7 @@ export default function PlanDetailPage() {
   const [plan, setPlan] = useState<PlanDetail | null>(null);
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<number | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   const reload = useCallback(() => {
     api.plans.get(id).then(setPlan).catch((e) => toast.error(e.detail));
@@ -58,15 +60,6 @@ export default function PlanDetailPage() {
     } catch (e: any) { toast.error(e.detail); }
     finally { setBusy(false); }
   }
-  async function deletePlan() {
-    if (!confirm("Delete this plan locally? (Garmin uploads NOT removed.)")) return;
-    try {
-      await api.plans.delete(id);
-      toast.success("Plan deleted");
-      router.push("/");
-    } catch (e: any) { toast.error(e.detail); }
-  }
-
   if (!plan) return <p className="p-8 text-muted-foreground">Loading…</p>;
 
   const uploadedCount = plan.workouts.filter((w) => w.status === "uploaded").length;
@@ -146,10 +139,24 @@ export default function PlanDetailPage() {
       </div>
 
       <div className="mt-12 pt-6 border-t">
-        <Button variant="ghost" className="text-destructive hover:bg-destructive/10" onClick={deletePlan}>
+        <Button
+          variant="ghost"
+          className="text-destructive hover:bg-destructive/10"
+          onClick={() => setDeleteOpen(true)}
+          disabled={busy}
+        >
           <Trash2 className="h-4 w-4" /> Delete plan
         </Button>
       </div>
+
+      <DeletePlanDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        planId={plan.id}
+        planName={plan.name}
+        uploadedCount={uploadedCount}
+        onDeleted={() => router.push("/")}
+      />
     </div>
   );
 }

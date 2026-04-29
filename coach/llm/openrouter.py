@@ -55,9 +55,15 @@ def chat(
     messages: list[dict[str, str]],
     *,
     temperature: float = 0.4,
-    timeout: float = 60.0,
+    timeout: float = 120.0,
+    max_tokens: int = 16000,
 ) -> ChatResult:
-    """Send a chat completion request, falling back on rate-limit / 5xx."""
+    """Send a chat completion request, falling back on rate-limit / 5xx.
+
+    `max_tokens` is set high (16k) because plan JSON can run ~10k tokens
+    for a 12-week multi-sport plan. Free models often default to a low
+    output cap and silently truncate — we ask for more than we need.
+    """
     primary, fallback = _resolve_models()
     headers = {
         "Authorization": f"Bearer {_api_key()}",
@@ -68,7 +74,12 @@ def chat(
 
     last_err: Exception | None = None
     for model in _unique_in_order((primary, fallback)):
-        body = {"model": model, "messages": messages, "temperature": temperature}
+        body = {
+            "model": model,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+        }
         try:
             with httpx.Client(timeout=timeout) as client:
                 resp = client.post(OPENROUTER_URL, headers=headers, json=body)

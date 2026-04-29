@@ -2,23 +2,26 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Plus, Calendar, ChevronRight } from "lucide-react";
+import { Plus, Calendar, ChevronRight, Trash2 } from "lucide-react";
 import { api, type PlanSummary } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { DeletePlanDialog } from "@/components/delete-plan-dialog";
 import { formatDate } from "@/lib/utils";
 import { toast } from "sonner";
 
 export default function PlansPage() {
   const [plans, setPlans] = useState<PlanSummary[] | null>(null);
+  const [deletingPlan, setDeletingPlan] = useState<PlanSummary | null>(null);
 
-  useEffect(() => {
+  function load() {
     api.plans.list().then(setPlans).catch((e) => {
       toast.error(`Failed to load plans: ${e.detail}`);
       setPlans([]);
     });
-  }, []);
+  }
+  useEffect(load, []);
 
   return (
     <div className="max-w-5xl mx-auto px-8 py-10">
@@ -58,17 +61,34 @@ export default function PlansPage() {
 
       <div className="space-y-3">
         {plans?.map((p) => (
-          <Link key={p.id} href={`/plans/${p.id}`}>
-            <Card className="hover:border-primary transition-colors cursor-pointer">
+          <Card
+            key={p.id}
+            className="hover:border-primary transition-colors group"
+          >
+            <Link href={`/plans/${p.id}`} className="block">
               <CardHeader className="pb-3">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <CardTitle>{p.name}</CardTitle>
-                    <p className="text-sm text-muted-foreground mt-1">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <CardTitle className="truncate">{p.name}</CardTitle>
+                    <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
                       {p.goal_text}
                     </p>
                   </div>
-                  <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setDeletingPlan(p);
+                      }}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 inline-flex items-center justify-center rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                      title="Delete plan"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                    <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                  </div>
                 </div>
               </CardHeader>
               <CardContent className="flex flex-wrap items-center gap-2 text-sm">
@@ -83,10 +103,21 @@ export default function PlansPage() {
                   {p.status}
                 </Badge>
               </CardContent>
-            </Card>
-          </Link>
+            </Link>
+          </Card>
         ))}
       </div>
+
+      {deletingPlan && (
+        <DeletePlanDialog
+          open={!!deletingPlan}
+          onOpenChange={(o) => !o && setDeletingPlan(null)}
+          planId={deletingPlan.id}
+          planName={deletingPlan.name}
+          uploadedCount={deletingPlan.uploaded_count}
+          onDeleted={load}
+        />
+      )}
     </div>
   );
 }

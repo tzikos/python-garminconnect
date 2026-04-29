@@ -20,6 +20,8 @@ class ProfileOut(BaseModel):
     preferred_days: dict[str, list[int]] = {}
     weekly_hours_target: Optional[float] = None
     notes: Optional[str] = None
+    enabled_sports: list[str] = []
+    sport_profiles: dict[str, Any] = {}
 
 
 class ProfileUpdate(BaseModel):
@@ -31,6 +33,8 @@ class ProfileUpdate(BaseModel):
     preferred_days: Optional[dict[str, list[int]]] = None
     weekly_hours_target: Optional[float] = None
     notes: Optional[str] = None
+    enabled_sports: Optional[list[str]] = None
+    sport_profiles: Optional[dict[str, Any]] = None
 
 
 class PlanSummary(BaseModel):

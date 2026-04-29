@@ -14,6 +14,7 @@ from coach.api.schemas import (
     SettingsOut,
 )
 from coach.primitives import PRIMITIVES
+from coach.sports import EMPTY_BENCHMARKS, SPORTS
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
@@ -58,3 +59,9 @@ def list_primitives() -> list[PrimitiveDef]:
         params = list(inspect.signature(fn).parameters.keys())
         out.append(PrimitiveDef(name=name, params=params))
     return out
+
+
+@router.get("/sports")
+def list_sports() -> dict:
+    """Canonical sport list + benchmark schema templates for the UI."""
+    return {"sports": SPORTS, "benchmarks": EMPTY_BENCHMARKS}
