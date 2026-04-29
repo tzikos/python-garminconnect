@@ -488,6 +488,27 @@ def sync_unpush(
         typer.echo(f"  ! workout {wid}: {msg}")
 
 
+# ----------------------------------------------------------------- serve
+
+
+@app.command()
+def serve(
+    host: Annotated[str, typer.Option(help="Host to bind.")] = "127.0.0.1",
+    port: Annotated[int, typer.Option(help="Port to bind.")] = 8000,
+    reload: Annotated[bool, typer.Option(help="Auto-reload on code changes.")] = False,
+) -> None:
+    """Run the FastAPI backend (for use with the Next.js frontend)."""
+    import uvicorn
+
+    init_db()  # safe to call multiple times; ensures tables exist
+    uvicorn.run(
+        "coach.api.app:app",
+        host=host,
+        port=port,
+        reload=reload,
+    )
+
+
 # ----------------------------------------------------------------- entry
 
 
