@@ -269,6 +269,70 @@ def test_generate_plan_collects_interference_warnings(memory_db):
     assert any("back-to-back" in w.message for w in result.warnings)
 
 
+def test_generate_plan_drops_workouts_before_actual_start(memory_db):
+    """Mid-week start: LLM plans Mon->Sun; we drop workouts < actual start."""
+    _seed_profile(memory_db)
+    full_week_plan = {
+        "name": "Mid-week test",
+        "weekly_structure": [
+            {
+                "week_number": 1,
+                "theme": "Base",
+                "workouts": [
+                    # These two should be dropped (before Wed 2026-04-29)
+                    {
+                        "date": "2026-04-27", "sport": "running",
+                        "primitive_type": "easy_run",
+                        "primitive_params": {"duration_min": 30},
+                        "title": "Mon easy",
+                    },
+                    {
+                        "date": "2026-04-28", "sport": "strength",
+                        "primitive_type": "strength_session",
+                        "primitive_params": {
+                            "duration_min": 45,
+                            "exercises": [{"name": "Squat", "sets": 3, "reps": "5"}],
+                        },
+                        "title": "Tue lift",
+                    },
+                    # These three should be kept
+                    {
+                        "date": "2026-04-29", "sport": "running",
+                        "primitive_type": "tempo_run",
+                        "primitive_params": {"tempo_min": 20},
+                        "title": "Wed tempo",
+                    },
+                    {
+                        "date": "2026-05-01", "sport": "running",
+                        "primitive_type": "easy_run",
+                        "primitive_params": {"duration_min": 40},
+                        "title": "Fri easy",
+                    },
+                    {
+                        "date": "2026-05-03", "sport": "running",
+                        "primitive_type": "long_run",
+                        "primitive_params": {"duration_min": 75},
+                        "title": "Sun long",
+                    },
+                ],
+            }
+        ],
+    }
+    result = generate_plan(
+        goal_text="x",
+        start_date=date(2026, 4, 29),  # Wednesday
+        end_date=date(2026, 5, 3),
+        chat_fn=lambda _msgs: _stub_response(full_week_plan),
+    )
+    assert result.workouts_created == 3
+
+    with memory_db() as s:
+        rows = s.query(ScheduledWorkout).order_by(ScheduledWorkout.date).all()
+        assert [r.date for r in rows] == [
+            date(2026, 4, 29), date(2026, 5, 1), date(2026, 5, 3),
+        ]
+
+
 def test_generate_plan_requires_profile(memory_db):
     # No profile seeded.
     with pytest.raises(RuntimeError, match="No profile"):

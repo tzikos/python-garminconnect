@@ -18,7 +18,7 @@ import json
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 
 from coach.db import session
@@ -70,9 +70,15 @@ def generate_plan(
         "notes": prof.notes,
     }
 
+    # Anchor the plan to the Monday of the week containing start_date so the
+    # LLM can design clean Mon-Sun weeks. Workouts before the user's actual
+    # start_date are filtered out after generation, leaving a partial first
+    # week if needed.
+    anchor_monday = start_date - timedelta(days=start_date.weekday())
+
     user_msg = build_user_prompt(
         goal_text=goal_text,
-        start_date=start_date,
+        start_date=anchor_monday,
         end_date=end_date,
         profile=profile_dict,
         start_volume_km=start_volume_km,
@@ -86,6 +92,8 @@ def generate_plan(
     ])
 
     parsed = _parse_plan_json(result.content)
+    if start_date != anchor_monday:
+        _drop_workouts_before(parsed, start_date)
     validate_plan_dict(parsed)
 
     plan_id, n_workouts = _materialize(parsed, goal_text, start_date, end_date)
@@ -99,6 +107,18 @@ def generate_plan(
         model_used=result.model_used,
         raw_response=result.content,
     )
+
+
+# ---------------------------------------------------------------- filtering
+
+
+def _drop_workouts_before(plan: dict[str, Any], cutoff: date) -> None:
+    """Remove workouts dated before `cutoff` from every week. In place."""
+    for week in plan.get("weekly_structure", []):
+        week["workouts"] = [
+            w for w in week.get("workouts", [])
+            if date.fromisoformat(w["date"]) >= cutoff
+        ]
 
 
 # ----------------------------------------------------------------- parsing
