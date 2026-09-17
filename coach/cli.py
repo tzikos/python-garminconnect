@@ -394,6 +394,7 @@ def sync_push(
         bool,
         typer.Option("--dry-run", help="Show what would be uploaded; no API calls."),
     ] = False,
+    yes: Annotated[bool, typer.Option("--yes", help="Skip confirmation.")] = False,
 ) -> None:
     """Upload + schedule every planned workout in the plan."""
     from coach.sync import push_plan
@@ -422,7 +423,10 @@ def sync_push(
         typer.echo("(dry-run; no upload performed)")
         return
 
-    typer.confirm("\nPush to Garmin?", abort=True, default=False)
+    if not yes:
+        # Without a TTY (a script, or an agent shelling out) confirm aborts,
+        # so --yes is the only way through for a caller that already asked.
+        typer.confirm("\nPush to Garmin?", abort=True, default=False)
 
     from coach.garmin_client import get_client
 
