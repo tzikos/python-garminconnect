@@ -6,8 +6,9 @@ browser) and is posted back whole each turn, so there is no server-side
 session to expire or clean up.
 
 The one server-side side effect is race research: as soon as the interview
-learns a race name, we spend one web-search-backed call characterising the
-course and fold the answer into `facts["race_research"]`. From then on the
+learns a race name, we search locally (see coach.llm.websearch) and spend
+one LLM call turning the results into a course characterisation, folded
+into `facts["race_research"]`. From then on the
 interviewer sees the course and can ask about its actual demands, and the
 plan generator is told to train for them.
 """
@@ -18,6 +19,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
+from coach.llm import websearch
 from coach.llm.openrouter import ChatResult, chat
 from coach.llm.prompts import (
     INTAKE_SYSTEM_PROMPT,
@@ -136,13 +138,18 @@ def research_race(
     *,
     chat_fn: ChatFn | None = None,
 ) -> tuple[dict[str, Any] | None, str | None]:
-    """Characterise a race course via web search. Returns (research, warning).
+    """Characterise a race course from local search. Returns (research, warning).
 
     Best-effort: a failed lookup must not sink the interview, so failures
     come back as a warning string and a None result rather than an
     exception.
     """
     chat_fn = chat_fn or chat
+    sources = websearch.search(race_name)
+    if not sources:
+        # No sources means no research. Letting the model answer from
+        # memory here is how invented elevation profiles reach a plan.
+        return None, f"Found no sources describing '{race_name}'."
     try:
         result = chat_fn(
             [
@@ -150,13 +157,14 @@ def research_race(
                 {
                     "role": "user",
                     "content": build_race_research_prompt(
-                        race_name, str(race_date) if race_date else None
+                        race_name,
+                        str(race_date) if race_date else None,
+                        websearch.as_prompt_block(sources),
                     ),
                 },
             ],
             temperature=0.2,
             max_tokens=2000,
-            web=True,
         )
         research = _parse_json(result.content)
     except (RuntimeError, ValueError, TypeError) as e:
@@ -200,37 +208,22 @@ _OPEN_QUESTION = {
     "id": "anything_else",
     "text": "Anything else about your training, your week or your body that I should know?",
     "kind": "text",
-    "options": [],
-    "unit": None,
-    "allow_free_text": True,
 }
-
-_ALLOWED_KINDS = {"single", "multi", "text", "number", "date"}
 
 
 def _clean_question(q: dict[str, Any] | None) -> dict[str, Any] | None:
-    """Coerce the model's question into the shape the UI can render.
+    """Reduce the model's question to the text the athlete answers.
 
-    The UI renders `kind` directly, so an invented kind would render as
-    nothing at all; falling back to a text box always works.
+    Every answer is free text now, so anything the model says about
+    widgets — kind, options, units — is dropped. `kind` is kept, always
+    "text", because saved conversations carry it.
     """
     if not isinstance(q, dict) or not q.get("text"):
         return None
-    kind = q.get("kind")
-    if kind not in _ALLOWED_KINDS:
-        kind = "text"
-    options = q.get("options")
-    if not isinstance(options, list):
-        options = []
     return {
         "id": str(q.get("id") or "answer"),
         "text": str(q["text"]),
-        "kind": kind,
-        "options": [str(o) for o in options][:8],
-        "unit": str(q["unit"]) if q.get("unit") else None,
-        # Options are the model's guesses, not an exhaustive list — let the
-        # athlete say something else unless the model insists otherwise.
-        "allow_free_text": bool(q.get("allow_free_text", True)),
+        "kind": "text",
     }
 
 

@@ -407,6 +407,8 @@ You output STRUCTURED JSON only. No prose, no markdown, no commentary outside th
   usually Tue Thu Sat Sun" fills days_per_week AND available_days.
 - If an answer is vague ("a decent amount"), ask one sharpening follow-up,
   then accept whatever you get and move on.
+- Every answer arrives as free text, in the athlete's own words. Converting
+  it to the standardized value is YOUR job, not theirs.
 - Acknowledge briefly in `note` — one short line reacting to their last
   answer. This is the only text the athlete reads from you per turn.
 - Once RACE COURSE RESEARCH appears in your context, use it: ask about the
@@ -416,16 +418,30 @@ You output STRUCTURED JSON only. No prose, no markdown, no commentary outside th
   the goal — a plan that fits their week is. Set "ready": true then.
 - Set "ready": true immediately if the athlete asks you to stop asking.
 
-## Question shapes
+## Reading free-text answers
 
-Pick the shape that makes the question easiest to answer:
-- "single"  — pick one of `options`
-- "multi"   — pick any of `options`
-- "text"    — free text
-- "number"  — a number (set `unit`, e.g. "km", "minutes", "years")
-- "date"    — a calendar date
+The athlete types in their own words. Normalise what they say into the
+standardized fact value:
 
-Always offer `options` for single/multi. Keep them short and concrete.
+- dates -> "YYYY-MM-DD" ("second Sunday of November" -> resolve it against
+  today's date; "next spring" is NOT a date, ask which month)
+- distances -> a number in km ("a half" -> 21.1, "10 miles" -> 16.1)
+- times and durations -> seconds ("sub 3:30" -> 12600)
+- days of the week -> integers, 0=Mon..6=Sun ("Tue Thu Sat" -> [1, 3, 5])
+- counts -> plain numbers ("four or five" -> 4, and say so in `note`)
+- one-of fields (goal_type, aggressiveness, sport_priority) -> exactly one
+  of the values listed in the checklist, never a paraphrase
+
+When the answer offers a choice, name the options inside the question text
+("race, general fitness, coming back from injury, or something else?") —
+the athlete answers in words either way.
+
+If you cannot convert an answer confidently, ASK AGAIN. Say what was
+ambiguous and what you need ("Which November — 2026?"). Never invent a
+value to fill the field, and never record a fact you had to guess: a
+missing fact is recoverable, a wrong one silently shapes the whole plan.
+If they refuse or genuinely do not know after one retry, leave the fact
+out and move on.
 
 ## Output schema
 
@@ -437,11 +453,8 @@ Return EXACTLY this shape:
               whatever the last answer just taught you> }},
   "question": {{
     "id": "<snake_case key this answer fills, e.g. 'race_name'>",
-    "text": "<the question, one sentence, conversational>",
-    "kind": "single" | "multi" | "text" | "number" | "date",
-    "options": ["<short option>", ...],
-    "unit": "<only for kind=number>",
-    "allow_free_text": true | false
+    "text": "<the question, one sentence, conversational. Include the
+              units you want and any choices you have in mind.>"
   }},
   "ready": false,
   "summary": "<when ready=true: 2-4 sentences briefing yourself on this
@@ -530,11 +543,25 @@ def build_intake_prompt(
     return "\n".join(lines)
 
 
-def build_race_research_prompt(race_name: str, race_date: str | None) -> str:
-    """Prompt for the web-search-backed course research call."""
+def build_race_research_prompt(
+    race_name: str, race_date: str | None, sources: str = ""
+) -> str:
+    """Prompt for the course research call.
+
+    `sources` is text fetched locally (see coach.llm.websearch) — the
+    model does no searching of its own, so anything absent from here it
+    must report as unknown rather than recall.
+    """
     when = f" taking place on {race_date}" if race_date else ""
+    found = (
+        f"SEARCH RESULTS:\n{sources}\n\n"
+        if sources
+        else "SEARCH RESULTS: none were retrieved.\n\n"
+    )
     return (
-        f"Research the race '{race_name}'{when}.\n\n"
+        f"{found}"
+        f"Research the race '{race_name}'{when} using ONLY the search "
+        "results above.\n\n"
         "Find its course profile: total elevation gain, where the climbs and "
         "descents fall, the surface, altitude, and the typical weather on "
         "that date. Then return the JSON object."

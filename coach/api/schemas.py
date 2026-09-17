@@ -169,15 +169,16 @@ class ChatMessage(BaseModel):
 class IntakeQuestion(BaseModel):
     id: str
     text: str
-    kind: str  # single | multi | text | number | date
-    options: list[str] = []
-    unit: Optional[str] = None
-    allow_free_text: bool = True
+    # Always "text": the athlete answers everything in their own words and
+    # the model normalises it. Kept so saved conversations still parse.
+    kind: str = "text"
 
 
 class IntakeRequest(BaseModel):
     history: list[ChatMessage] = []
     facts: dict[str, Any] = {}
+    # Omit to start a new conversation; the response carries the new id.
+    conversation_id: Optional[int] = None
 
 
 class IntakeResponse(BaseModel):
@@ -189,10 +190,32 @@ class IntakeResponse(BaseModel):
     model_used: str
     researched: bool = False
     warnings: list[str] = []
+    conversation_id: int
+
+
+class ConversationSummary(BaseModel):
+    id: int
+    title: str
+    ready: bool
+    plan_id: Optional[int] = None
+    updated_at: datetime.datetime
+    turns: int
+
+
+class ConversationDetail(BaseModel):
+    id: int
+    title: str
+    history: list[ChatMessage]
+    facts: dict[str, Any]
+    question: Optional[IntakeQuestion] = None
+    ready: bool
+    summary: str
+    plan_id: Optional[int] = None
 
 
 class GenerateFromChatRequest(BaseModel):
     facts: dict[str, Any]
+    conversation_id: Optional[int] = None
     start_date: datetime.date
     # Falls back to the race date the interview found, then to +12 weeks.
     end_date: Optional[datetime.date] = None

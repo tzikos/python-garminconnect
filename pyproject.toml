@@ -63,6 +63,7 @@ module = [
     "test_coach_intake",
     "test_coach_api_chat",
     "test_coach_openrouter",
+    "test_coach_websearch",
     "conftest",
 ]
 disallow_untyped_defs = false

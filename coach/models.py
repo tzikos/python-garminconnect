@@ -114,3 +114,35 @@ class ScheduledWorkout(Base):
     # planned -> uploaded -> completed (phase 2)
 
     plan: Mapped[Plan] = relationship(back_populates="workouts")
+
+
+class IntakeConversation(Base):
+    """A plan-intake interview, saved after every turn so it can be resumed.
+
+    The interview is otherwise pure browser state: a refresh, a crash or one
+    failed LLM call used to lose the whole conversation. `history` is the
+    transcript exactly as the client replays it, so resuming is just handing
+    it back.
+    """
+
+    __tablename__ = "intake_conversation"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    title: Mapped[str] = mapped_column(String(200), default="New plan")
+
+    history: Mapped[list[Any]] = mapped_column(JSON, default=list)
+    facts: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    # The question left on screen, so a resume reopens where it stopped.
+    question: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    ready: Mapped[bool] = mapped_column(default=False)
+    summary: Mapped[str] = mapped_column(Text, default="")
+
+    # Set once the interview has produced a plan.
+    plan_id: Mapped[int | None] = mapped_column(
+        ForeignKey("plan.id", ondelete="SET NULL"), nullable=True
+    )
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )

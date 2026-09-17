@@ -6,9 +6,33 @@ import json
 
 import pytest
 
+from coach.llm import websearch
 from coach.llm.intake import MAX_QUESTIONS, next_turn, research_race
 from coach.llm.openrouter import ChatResult
-from coach.llm.prompts import build_intake_prompt, render_intake_facts
+from coach.llm.prompts import (
+    RACE_RESEARCH_SYSTEM_PROMPT,
+    build_intake_prompt,
+    render_intake_facts,
+)
+
+
+@pytest.fixture
+def local_sources(monkeypatch):
+    """Stub the local search and record what was searched for."""
+    searched = []
+
+    def fake_search(query, **kwargs):
+        searched.append(query)
+        return [
+            websearch.Source(
+                title="Athens Classic Marathon",
+                url="https://en.wikipedia.org/wiki/Athens_Classic_Marathon",
+                text="Long climb from km 17 to km 31.",
+            )
+        ]
+
+    monkeypatch.setattr(websearch, "search", fake_search)
+    return searched
 
 PROFILE = {
     "name": "Tzikos",
@@ -90,17 +114,20 @@ def test_question_cap_forces_ready():
     assert turn.warnings
 
 
-def test_unknown_question_kind_falls_back_to_text():
-    """The UI renders `kind` directly, so an invented kind must not reach it."""
+def test_widget_fields_are_stripped_so_every_answer_stays_free_text():
+    """Options and pickers are gone; only the question text survives."""
     turn = next_turn(
         history=[],
         profile=PROFILE,
         chat_fn=_stub(_turn_json(question={
-            "id": "x", "text": "How?", "kind": "slider", "options": "nope",
+            "id": "x",
+            "text": "How?",
+            "kind": "single",
+            "options": ["a", "b"],
+            "unit": "km",
         })),
     )
-    assert turn.question["kind"] == "text"
-    assert turn.question["options"] == []
+    assert turn.question == {"id": "x", "text": "How?", "kind": "text"}
 
 
 def test_a_turn_with_nothing_to_ask_falls_back_to_an_open_question():
@@ -141,15 +168,15 @@ RESEARCH = json.dumps({
 })
 
 
-def test_naming_a_race_triggers_a_web_backed_lookup():
+def test_naming_a_race_triggers_a_locally_searched_lookup(local_sources):
     chat_fn = _stub(_turn_json(facts={"race_name": "Athens Marathon"}), RESEARCH)
     turn = next_turn(history=[], profile=PROFILE, chat_fn=chat_fn)
 
     assert turn.researched is True
     assert turn.facts["race_research"]["profile"] == "hilly"
-    # The interview turn must not search; only the research call may.
-    assert chat_fn.calls[0].get("web") is not True
-    assert chat_fn.calls[1]["web"] is True
+    assert local_sources == ["Athens Marathon"]  # searched here, not by the model
+    # What we fetched has to reach the model, or it answers from memory.
+    assert "Long climb from km 17" in chat_fn.calls[1]["messages"][1]["content"]
 
 
 def test_race_is_researched_only_once():
@@ -165,9 +192,9 @@ def test_race_is_researched_only_once():
     assert turn.facts["race_research"]["profile"] == "flat"
 
 
-def test_failed_research_warns_instead_of_raising():
+def test_failed_research_warns_instead_of_raising(local_sources):
     def chat_fn(messages, **kwargs):
-        if kwargs.get("web"):
+        if RACE_RESEARCH_SYSTEM_PROMPT in messages[0]["content"]:
             raise RuntimeError("all models failed")
         return ChatResult(
             content=_turn_json(facts={"race_name": "Nowhere 10k"}),
@@ -181,7 +208,18 @@ def test_failed_research_warns_instead_of_raising():
     assert turn.question is not None  # interview continues
 
 
-def test_research_race_defaults_the_name_when_the_model_omits_it():
+def test_a_race_nothing_was_found_about_is_not_answered_from_memory(monkeypatch):
+    """No sources must mean no research — never a guessed elevation profile."""
+    monkeypatch.setattr(websearch, "search", lambda *a, **kw: [])
+    chat_fn = _stub(RESEARCH)
+    research, warning = research_race("Nowhere 10k", chat_fn=chat_fn)
+
+    assert research is None
+    assert "Nowhere 10k" in warning
+    assert chat_fn.calls == []  # not a single token spent
+
+
+def test_research_race_defaults_the_name_when_the_model_omits_it(local_sources):
     research, warning = research_race(
         "Some Half", "2026-11-08", chat_fn=_stub('{"profile": "flat"}')
     )
@@ -228,18 +266,6 @@ def test_render_intake_facts_surfaces_course_research():
     assert "RACE COURSE RESEARCH" in block
     assert "Hilly marathon." in block
     assert "45" in block
-
-
-@pytest.mark.parametrize("kind", ["single", "multi", "text", "number", "date"])
-def test_all_documented_question_kinds_pass_through(kind):
-    turn = next_turn(
-        history=[],
-        profile=PROFILE,
-        chat_fn=_stub(_turn_json(question={
-            "id": "x", "text": "?", "kind": kind, "options": ["a", "b"],
-        })),
-    )
-    assert turn.question["kind"] == kind
 
 
 def test_profile_fields_echoed_back_are_not_kept_as_intake_facts():

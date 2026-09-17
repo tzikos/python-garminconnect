@@ -134,3 +134,158 @@ def test_end_date_falls_back_when_the_race_date_is_junk_or_past():
     assert _end_date_from({"race_date": "2020-01-01"}, start) == twelve_weeks
     assert _end_date_from({}, start) == twelve_weeks
     assert _end_date_from({"race_date": "2026-11-08"}, start) == date(2026, 11, 8)
+
+
+# ------------------------------------------------- conversation persistence
+
+
+def _stub_turn(monkeypatch, **over):
+    """Make the next chat turn return a fixed payload."""
+    body = {
+        "note": "Nice.",
+        "facts": {"goal_type": "race", "race_name": "Athens Marathon"},
+        "question": {"id": "race_date", "text": "When?", "kind": "text"},
+        "ready": False,
+        "summary": "",
+    }
+    body.update(over)
+    monkeypatch.setattr(
+        "coach.llm.intake.chat",
+        lambda messages, **kw: type(
+            "R", (), {"content": json.dumps(body), "model_used": "m"}
+        )(),
+    )
+    monkeypatch.setattr("coach.llm.intake.websearch.search", lambda *a, **kw: [])
+
+
+def test_a_turn_is_saved_and_can_be_read_back(client, monkeypatch):
+    _stub_turn(monkeypatch)
+    r = client.post("/api/plans/chat", json={"history": [], "facts": {}})
+    conv_id = r.json()["conversation_id"]
+
+    got = client.get(f"/api/plans/chat/conversations/{conv_id}").json()
+    assert got["title"] == "Athens Marathon"  # named from the facts
+    assert got["question"]["id"] == "race_date"  # resumes where it stopped
+    assert got["facts"]["race_name"] == "Athens Marathon"
+    assert got["history"][-1] == {"role": "assistant", "content": "Nice."}
+
+
+def test_continuing_a_conversation_updates_it_instead_of_forking(
+    client, monkeypatch
+):
+    _stub_turn(monkeypatch)
+    first = client.post("/api/plans/chat", json={"history": [], "facts": {}}).json()
+
+    _stub_turn(monkeypatch, note="Got it.", ready=True, question=None)
+    second = client.post(
+        "/api/plans/chat",
+        json={
+            "history": [
+                {"role": "assistant", "content": "Nice."},
+                {"role": "user", "content": "Athens Marathon"},
+            ],
+            "facts": first["facts"],
+            "conversation_id": first["conversation_id"],
+        },
+    ).json()
+
+    assert second["conversation_id"] == first["conversation_id"]
+    assert len(client.get("/api/plans/chat/conversations").json()) == 1
+    got = client.get(
+        f"/api/plans/chat/conversations/{first['conversation_id']}"
+    ).json()
+    assert got["ready"] is True
+    assert got["question"] is None
+    assert len(got["history"]) == 3
+
+
+def test_a_failed_turn_still_leaves_the_conversation_resumable(
+    client, monkeypatch
+):
+    """The 400 that used to end the interview must not lose it."""
+    _stub_turn(monkeypatch)
+    first = client.post("/api/plans/chat", json={"history": [], "facts": {}}).json()
+
+    def boom(messages, **kw):
+        raise RuntimeError("OpenRouter refused the request (HTTP 402)")
+
+    monkeypatch.setattr("coach.llm.intake.chat", boom)
+    failed = client.post(
+        "/api/plans/chat",
+        json={
+            "history": [{"role": "assistant", "content": "Nice."}],
+            "facts": first["facts"],
+            "conversation_id": first["conversation_id"],
+        },
+    )
+    assert failed.status_code == 400
+
+    got = client.get(
+        f"/api/plans/chat/conversations/{first['conversation_id']}"
+    ).json()
+    assert got["facts"]["race_name"] == "Athens Marathon"
+    assert got["question"]["id"] == "race_date"
+
+
+def test_conversations_are_listed_newest_first_and_can_be_deleted(
+    client, monkeypatch
+):
+    _stub_turn(monkeypatch)
+    a = client.post("/api/plans/chat", json={"history": [], "facts": {}}).json()
+    _stub_turn(monkeypatch, facts={"race_name": "Berlin Marathon"})
+    b = client.post("/api/plans/chat", json={"history": [], "facts": {}}).json()
+
+    listed = client.get("/api/plans/chat/conversations").json()
+    assert [c["id"] for c in listed] == [b["conversation_id"], a["conversation_id"]]
+    assert listed[0]["title"] == "Berlin Marathon"
+    assert listed[0]["turns"] == 1
+
+    assert client.delete(
+        f"/api/plans/chat/conversations/{a['conversation_id']}"
+    ).status_code == 204
+    assert len(client.get("/api/plans/chat/conversations").json()) == 1
+    assert client.get(
+        f"/api/plans/chat/conversations/{a['conversation_id']}"
+    ).status_code == 404
+
+
+def test_generating_links_the_plan_back_to_its_interview(client, monkeypatch):
+    _stub_turn(monkeypatch)
+    conv_id = client.post(
+        "/api/plans/chat", json={"history": [], "facts": {}}
+    ).json()["conversation_id"]
+
+    from coach.llm import planner
+
+    def fake_generate(**kwargs):
+        from coach.db import session as db_session
+        from coach.models import Plan
+
+        with db_session() as s:
+            plan = Plan(
+                name="P",
+                goal_text="g",
+                start_date=date(2026, 1, 5),
+                end_date=date(2026, 3, 30),
+            )
+            s.add(plan)
+            s.flush()
+            pid = plan.id
+        return type("R", (), {"plan_id": pid, "model_used": "m", "warnings": []})()
+
+    monkeypatch.setattr("coach.api.routes.plans.generate_plan", fake_generate, raising=False)
+    monkeypatch.setattr(planner, "generate_plan", fake_generate)
+    monkeypatch.setattr("coach.llm.generate_plan", fake_generate)
+
+    r = client.post(
+        "/api/plans/chat/generate",
+        json={
+            "facts": {"race_name": "Athens Marathon"},
+            "start_date": "2026-01-05",
+            "conversation_id": conv_id,
+        },
+    )
+    assert r.status_code == 200
+    assert client.get(
+        f"/api/plans/chat/conversations/{conv_id}"
+    ).json()["plan_id"] is not None

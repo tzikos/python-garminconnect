@@ -136,7 +136,12 @@ def test_catalogue_is_fetched_once_per_process(monkeypatch):
 
 def _chat_with(monkeypatch, responses):
     """Run chat() against a scripted sequence of (status, body) per model."""
-    seen = []
+    class _Seen(list):
+        """The models tried, with the request bodies hanging off it."""
+        bodies: list = []
+
+    seen = _Seen()
+    bodies = seen.bodies = []
 
     class _Resp:
         def __init__(self, status, body):
@@ -156,6 +161,7 @@ def _chat_with(monkeypatch, responses):
 
         def post(self, url, headers=None, json=None, **kw):
             seen.append(json["model"])
+            bodies.append(json)
             status, body = responses[min(len(seen) - 1, len(responses) - 1)]
             return _Resp(status, body)
 
@@ -165,6 +171,7 @@ def _chat_with(monkeypatch, responses):
         lambda k: "key" if k == orouter.secrets.OPENROUTER_API_KEY else None,
     )
     monkeypatch.setattr(orouter.httpx, "Client", lambda **kw: _Client())
+    seen.bodies = bodies
     return seen
 
 
@@ -201,3 +208,108 @@ def test_a_200_carrying_an_error_body_moves_on(monkeypatch):
     _catalogue(monkeypatch, [_model("live:free")])
     seen = _chat_with(monkeypatch, [(200, {"error": {"message": "nope"}}), OK])
     assert orouter.chat([{"role": "user", "content": "x"}]).model_used == seen[1]
+
+
+def test_payment_required_stops_the_chain_instead_of_retrying_every_model(monkeypatch):
+    """402 is about the account, not the model — retrying 20 more is noise."""
+    _catalogue(monkeypatch, [_model(f"m{i}:free", ctx=i) for i in range(5)])
+    seen = _chat_with(monkeypatch, [(402, "Payment Required")])
+    with pytest.raises(RuntimeError, match="OpenRouter refused"):
+        orouter.chat([{"role": "user", "content": "x"}])
+    assert len(seen) == 1
+
+
+def test_a_model_gated_to_other_apps_403s_and_the_next_one_is_tried(monkeypatch):
+    """403 here is about the model ("agentic harnesses only"), not the key."""
+    _catalogue(monkeypatch, [_model("live:free")])
+    seen = _chat_with(monkeypatch, [(403, "only available on agentic harnesses"), OK])
+    assert orouter.chat([{"role": "user", "content": "x"}]).model_used == seen[1]
+    assert len(seen) == 2
+
+
+def test_every_request_turns_reasoning_off_and_asks_for_json(monkeypatch):
+    """Reasoning models otherwise burn ~30s and leak the thinking into content."""
+    _catalogue(monkeypatch, [_model("live:free")])
+    seen = _chat_with(monkeypatch, [OK])
+    orouter.chat([{"role": "user", "content": "x"}])
+    (body,) = seen.bodies
+    assert body["reasoning"] == {"enabled": False}
+    assert body["response_format"] == {"type": "json_object"}
+
+
+def test_the_shared_daily_quota_stops_the_chain_at_the_first_429(monkeypatch):
+    """free-models-per-day is account-wide: the other 22 are out too."""
+    _catalogue(monkeypatch, [_model(f"m{i}:free", ctx=i) for i in range(5)])
+    quota = (429, {"error": {"message": "Rate limit exceeded: free-models-per-day"}})
+    seen = _chat_with(monkeypatch, [quota])
+    with pytest.raises(RuntimeError, match="free daily quota"):
+        orouter.chat([{"role": "user", "content": "x"}])
+    assert len(seen) == 1
+
+
+def test_an_ordinary_429_still_walks_on(monkeypatch):
+    """A provider being busy says nothing about the next model."""
+    _catalogue(monkeypatch, [_model("live:free")])
+    seen = _chat_with(monkeypatch, [(429, "temporarily rate-limited upstream"), OK])
+    assert orouter.chat([{"role": "user", "content": "x"}]).model_used == seen[1]
+
+
+def test_a_model_that_demands_reasoning_is_retried_with_it_on(monkeypatch):
+    _catalogue(monkeypatch, [_model("live:free")])
+    refusal = (400, {"error": {"message": "Reasoning is mandatory for this endpoint"}})
+    seen = _chat_with(monkeypatch, [refusal, OK])
+    result = orouter.chat([{"role": "user", "content": "x"}])
+    assert seen == [seen[0], seen[0]]  # same model, retried
+    assert "reasoning" not in seen.bodies[1]
+    assert result.content == "hi"
+
+
+def test_a_local_endpoint_replaces_openrouter_entirely(monkeypatch):
+    """No key, no catalogue, no chain — just the one server you pointed at."""
+    monkeypatch.setenv("LOCAL_LLM_URL", "http://localhost:11434/v1/chat/completions")
+    monkeypatch.setenv("LOCAL_LLM_MODEL", "gemma3:12b")
+
+    def no_catalogue(*a, **kw):
+        raise AssertionError("the OpenRouter catalogue must not be fetched")
+
+    monkeypatch.setattr(orouter.httpx, "get", no_catalogue)
+    monkeypatch.setattr(
+        orouter, "_api_key", lambda: pytest.fail("no key should be needed")
+    )
+    seen = _chat_with(monkeypatch, [OK])
+    assert orouter.chat([{"role": "user", "content": "x"}]).model_used == "gemma3:12b"
+    assert seen == ["gemma3:12b"]
+    # `reasoning` is an OpenRouter extension; a local server would choke.
+    assert "reasoning" not in seen.bodies[0]
+    assert seen.bodies[0]["response_format"] == {"type": "json_object"}
+
+
+def test_a_local_endpoint_sends_a_key_only_when_one_is_set(monkeypatch):
+    """Ollama needs no auth; Groq and friends, on the same vars, do."""
+    monkeypatch.setenv("LOCAL_LLM_URL", "https://api.groq.com/openai/v1/chat/completions")
+    monkeypatch.setenv("LOCAL_LLM_MODEL", "llama-3.3-70b-versatile")
+    monkeypatch.setenv("LOCAL_LLM_KEY", "gsk_test")
+    captured = {}
+
+    class _Client:
+        def __init__(self, **kw): ...
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+
+        def post(self, url, headers=None, json=None, **kw):
+            captured["url"], captured["headers"] = url, headers
+            return type(
+                "R",
+                (),
+                {
+                    "status_code": 200,
+                    "text": "",
+                    "raise_for_status": lambda self: None,
+                    "json": lambda self: OK[1],
+                },
+            )()
+
+    monkeypatch.setattr(orouter.httpx, "Client", lambda **kw: _Client())
+    orouter.chat([{"role": "user", "content": "x"}])
+    assert captured["url"].startswith("https://api.groq.com/")
+    assert captured["headers"]["Authorization"] == "Bearer gsk_test"

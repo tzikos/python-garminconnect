@@ -2,26 +2,41 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Plus, Calendar, ChevronRight, Trash2 } from "lucide-react";
-import { api, type PlanSummary } from "@/lib/api";
+import { Plus, Calendar, ChevronRight, MessageSquare, Trash2 } from "lucide-react";
+import { api, type ConversationSummary, type PlanSummary } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { DeletePlanDialog } from "@/components/delete-plan-dialog";
-import { formatDate } from "@/lib/utils";
+import { formatDate, formatDateTime } from "@/lib/utils";
 import { toast } from "sonner";
 
 export default function PlansPage() {
   const [plans, setPlans] = useState<PlanSummary[] | null>(null);
   const [deletingPlan, setDeletingPlan] = useState<PlanSummary | null>(null);
+  const [drafts, setDrafts] = useState<ConversationSummary[]>([]);
 
   function load() {
     api.plans.list().then(setPlans).catch((e) => {
       toast.error(`Failed to load plans: ${e.detail}`);
       setPlans([]);
     });
+    // Interviews that never reached a plan — the ones worth resuming.
+    api.plans
+      .conversations()
+      .then((all) => setDrafts(all.filter((c) => c.plan_id === null)))
+      .catch(() => setDrafts([]));
   }
   useEffect(load, []);
+
+  async function discardDraft(id: number) {
+    try {
+      await api.plans.deleteConversation(id);
+      setDrafts((d) => d.filter((c) => c.id !== id));
+    } catch (e: any) {
+      toast.error(`Could not discard: ${e.detail ?? e.message}`);
+    }
+  }
 
   return (
     <div className="max-w-5xl mx-auto px-8 py-10">
@@ -39,6 +54,46 @@ export default function PlansPage() {
           </Link>
         </Button>
       </div>
+
+      {drafts.length > 0 && (
+        <div className="mb-8">
+          <h2 className="text-sm font-medium text-muted-foreground mb-3">
+            Unfinished interviews
+          </h2>
+          <div className="space-y-2">
+            {drafts.map((c) => (
+              <Card key={c.id} className="hover:border-primary transition-colors group">
+                <Link href={`/plans/new?c=${c.id}`} className="block">
+                  <CardContent className="py-3 flex items-center gap-3">
+                    <MessageSquare className="h-4 w-4 text-muted-foreground shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium truncate">{c.title}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {c.turns} message{c.turns === 1 ? "" : "s"} ·{" "}
+                        {formatDateTime(c.updated_at)}
+                        {c.ready ? " · ready to build" : ""}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        void discardDraft(c.id);
+                      }}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 inline-flex items-center justify-center rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                      title="Discard interview"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                    <ChevronRight className="h-5 w-5 text-muted-foreground shrink-0" />
+                  </CardContent>
+                </Link>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
 
       {plans === null && (
         <p className="text-muted-foreground">Loading…</p>

@@ -9,10 +9,13 @@ from fastapi import APIRouter, HTTPException
 from sqlalchemy import select
 
 from coach.api.schemas import (
+    ConversationDetail,
+    ConversationSummary,
     GenerateFromChatRequest,
     GenerateRequest,
     GenerateResponse,
     IntakeQuestion,
+    ChatMessage,
     IntakeRequest,
     IntakeResponse,
     PlanCreate,
@@ -22,7 +25,7 @@ from coach.api.schemas import (
     WorkoutOut,
 )
 from coach.db import session
-from coach.models import Plan, ScheduledWorkout
+from coach.models import IntakeConversation, Plan, ScheduledWorkout
 from coach.tools import interference_check
 
 router = APIRouter(prefix="/api/plans", tags=["plans"])
@@ -204,9 +207,53 @@ def _profile_dict() -> dict[str, Any]:
         }
 
 
+def _conversation_title(facts: dict[str, Any]) -> str:
+    """A name you can recognise in a list, from whatever the interview knows."""
+    research = facts.get("race_research") or {}
+    for candidate in (
+        research.get("race_official_name"),
+        facts.get("race_name"),
+        facts.get("goal_text"),
+        facts.get("goal_type"),
+    ):
+        if candidate:
+            return str(candidate)[:200]
+    return "New plan"
+
+
+def _save_turn(req: IntakeRequest, turn: Any) -> int:
+    """Persist the interview after a turn. Returns the conversation id.
+
+    `req.history` is the client's transcript, which is authoritative — it
+    holds the question text as rendered. We append the note we just
+    produced; the next turn replaces the lot with the client's version.
+    """
+    history = [m.model_dump() for m in req.history]
+    if turn.note:
+        history.append({"role": "assistant", "content": turn.note})
+
+    with session() as s:
+        conv = (
+            s.get(IntakeConversation, req.conversation_id)
+            if req.conversation_id
+            else None
+        )
+        if conv is None:
+            conv = IntakeConversation()
+            s.add(conv)
+        conv.title = _conversation_title(turn.facts)
+        conv.history = history
+        conv.facts = turn.facts
+        conv.question = turn.question
+        conv.ready = turn.ready
+        conv.summary = turn.summary
+        s.flush()
+        return conv.id
+
+
 @router.post("/chat", response_model=IntakeResponse)
 def intake_turn(req: IntakeRequest) -> IntakeResponse:
-    """Advance the intake interview by one question."""
+    """Advance the intake interview by one question, saving as we go."""
     from coach.llm.intake import next_turn
 
     try:
@@ -227,7 +274,65 @@ def intake_turn(req: IntakeRequest) -> IntakeResponse:
         model_used=turn.model_used,
         researched=turn.researched,
         warnings=turn.warnings,
+        conversation_id=_save_turn(req, turn),
     )
+
+
+@router.get("/chat/conversations", response_model=list[ConversationSummary])
+def list_conversations() -> list[ConversationSummary]:
+    """Saved interviews, most recently touched first."""
+    with session() as s:
+        # SQLite's now() has second resolution, so two conversations touched
+        # in the same second tie — id breaks it.
+        rows = (
+            s.execute(
+                select(IntakeConversation).order_by(
+                    IntakeConversation.updated_at.desc(),
+                    IntakeConversation.id.desc(),
+                )
+            )
+            .scalars()
+            .all()
+        )
+        return [
+            ConversationSummary(
+                id=c.id,
+                title=c.title,
+                ready=c.ready,
+                plan_id=c.plan_id,
+                updated_at=c.updated_at,
+                turns=len(c.history or []),
+            )
+            for c in rows
+        ]
+
+
+@router.get("/chat/conversations/{conv_id}", response_model=ConversationDetail)
+def get_conversation(conv_id: int) -> ConversationDetail:
+    """Everything needed to put the interview back on screen."""
+    with session() as s:
+        conv = s.get(IntakeConversation, conv_id)
+        if conv is None:
+            raise HTTPException(404, "Conversation not found")
+        return ConversationDetail(
+            id=conv.id,
+            title=conv.title,
+            history=[ChatMessage(**m) for m in (conv.history or [])],
+            facts=conv.facts or {},
+            question=IntakeQuestion(**conv.question) if conv.question else None,
+            ready=conv.ready,
+            summary=conv.summary or "",
+            plan_id=conv.plan_id,
+        )
+
+
+@router.delete("/chat/conversations/{conv_id}", status_code=204)
+def delete_conversation(conv_id: int) -> None:
+    with session() as s:
+        conv = s.get(IntakeConversation, conv_id)
+        if conv is None:
+            raise HTTPException(404, "Conversation not found")
+        s.delete(conv)
 
 
 def _goal_text_from(facts: dict[str, Any]) -> str:
@@ -289,6 +394,10 @@ def generate_from_chat(req: GenerateFromChatRequest) -> GenerateResponse:
         # Keep the interview with the plan so a later edit knows why the
         # plan looks the way it does.
         plan.structure = {**(plan.structure or {}), "intake": req.facts}
+        if req.conversation_id:
+            conv = s.get(IntakeConversation, req.conversation_id)
+            if conv is not None:
+                conv.plan_id = plan.id
         rows = s.execute(
             select(ScheduledWorkout)
             .where(ScheduledWorkout.plan_id == result.plan_id)

@@ -128,10 +128,8 @@ export type Facts = Record<string, any>;
 export type IntakeQuestion = {
   id: string;
   text: string;
-  kind: "single" | "multi" | "text" | "number" | "date";
-  options: string[];
-  unit: string | null;
-  allow_free_text: boolean;
+  // Always "text" — every answer is free text, normalised by the model.
+  kind: string;
 };
 
 export type IntakeTurn = {
@@ -143,6 +141,27 @@ export type IntakeTurn = {
   model_used: string;
   researched: boolean;
   warnings: string[];
+  conversation_id: number;
+};
+
+export type ConversationSummary = {
+  id: number;
+  title: string;
+  ready: boolean;
+  plan_id: number | null;
+  updated_at: string;
+  turns: number;
+};
+
+export type ConversationDetail = {
+  id: number;
+  title: string;
+  history: ChatMessage[];
+  facts: Facts;
+  question: IntakeQuestion | null;
+  ready: boolean;
+  summary: string;
+  plan_id: number | null;
 };
 
 export const api = {
@@ -181,13 +200,24 @@ export const api = {
     unpush: (id: number) =>
       request<UnpushResult>(`/api/plans/${id}/unpush`, { method: "POST" }),
     export: (id: number) => request<Record<string, unknown>>(`/api/plans/${id}/export`),
-    chat: (data: { history: ChatMessage[]; facts: Facts }) =>
+    chat: (data: {
+      history: ChatMessage[];
+      facts: Facts;
+      conversation_id?: number | null;
+    }) =>
       request<IntakeTurn>("/api/plans/chat", {
         method: "POST",
         body: JSON.stringify(data),
       }),
+    conversations: () =>
+      request<ConversationSummary[]>("/api/plans/chat/conversations"),
+    conversation: (id: number) =>
+      request<ConversationDetail>(`/api/plans/chat/conversations/${id}`),
+    deleteConversation: (id: number) =>
+      request<void>(`/api/plans/chat/conversations/${id}`, { method: "DELETE" }),
     generateFromChat: (data: {
       facts: Facts;
+      conversation_id?: number | null;
       start_date: string;
       end_date?: string | null;
       goal_text?: string | null;
