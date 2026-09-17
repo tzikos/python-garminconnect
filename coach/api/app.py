@@ -6,10 +6,13 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from coach.api.routes import plans, profile, settings, sync, workouts
+from coach.db import init_db
 
 
 def create_app() -> FastAPI:
     """Build and configure the FastAPI app."""
+    init_db()  # idempotent; the API is usable without running `coach init` first
+
     app = FastAPI(title="Garmin Coach", version="0.1.0")
 
     # Local single-user app: allow the Next.js dev server to call us.
