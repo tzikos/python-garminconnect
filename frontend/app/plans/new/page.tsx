@@ -1,12 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Sparkles } from "lucide-react";
 import Link from "next/link";
-import { api } from "@/lib/api";
+import {
+  ArrowLeft,
+  Globe,
+  Loader2,
+  Mountain,
+  Send,
+  SlidersHorizontal,
+  Sparkles,
+} from "lucide-react";
+import { api, type ChatMessage, type Facts, type IntakeQuestion } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -18,119 +27,427 @@ function nextMonday(): string {
   d.setDate(d.getDate() + ((1 - d.getDay() + 7) % 7 || 7));
   return d.toISOString().slice(0, 10);
 }
-function plusWeeks(iso: string, weeks: number): string {
-  const d = new Date(iso + "T00:00:00");
-  d.setDate(d.getDate() + weeks * 7);
-  return d.toISOString().slice(0, 10);
+
+/** Fact keys the interview uses for bookkeeping, not for showing the athlete. */
+const HIDDEN_FACTS = new Set(["race_research", "_summary"]);
+
+function labelFor(key: string): string {
+  return key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function renderValue(v: any): string {
+  if (Array.isArray(v)) return v.join(", ");
+  if (v && typeof v === "object") return JSON.stringify(v);
+  return String(v);
 }
 
 export default function NewPlanPage() {
   const router = useRouter();
-  const [start, setStart] = useState(nextMonday());
-  const [end, setEnd] = useState(plusWeeks(nextMonday(), 12));
-  const [goal, setGoal] = useState("");
-  const [startVol, setStartVol] = useState(25);
-  const [peakVol, setPeakVol] = useState<number | "">("");
-  const [taperWeeks, setTaperWeeks] = useState(2);
-  const [busy, setBusy] = useState(false);
 
-  async function generate() {
-    if (!goal.trim()) return toast.error("Describe your goal first");
-    setBusy(true);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [facts, setFacts] = useState<Facts>({});
+  const [question, setQuestion] = useState<IntakeQuestion | null>(null);
+  const [ready, setReady] = useState(false);
+  const [summary, setSummary] = useState("");
+  const [thinking, setThinking] = useState(false);
+  const [researching, setResearching] = useState(false);
+
+  const [draft, setDraft] = useState("");
+  const [picked, setPicked] = useState<string[]>([]);
+
+  const [start, setStart] = useState(nextMonday());
+  const [building, setBuilding] = useState(false);
+
+  const bottom = useRef<HTMLDivElement>(null);
+  const started = useRef(false);
+
+  // Kick off the interview once. React 18 strict mode double-invokes effects
+  // in dev, and a second opening turn would bill a second LLM call.
+  useEffect(() => {
+    if (started.current) return;
+    started.current = true;
+    void send(null, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    bottom.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, thinking, ready]);
+
+  async function send(answer: string | null, historyOverride?: ChatMessage[]) {
+    const history = historyOverride ?? messages;
+    const next: ChatMessage[] =
+      answer === null ? history : [...history, { role: "user", content: answer }];
+    if (answer !== null) setMessages(next);
+    setDraft("");
+    setPicked([]);
+    setQuestion(null);
+    setThinking(true);
+    // The course lookup happens inside the same turn that learns the race
+    // name, so warn the user it will be slower before we know that it was.
+    setResearching(!facts.race_research && Boolean(answer));
+
     try {
-      const result = await api.plans.generate({
-        goal_text: goal,
-        start_date: start,
-        end_date: end,
-        start_volume_km: startVol,
-        peak_volume_km: peakVol === "" ? null : peakVol,
-        taper_weeks: taperWeeks,
-      });
+      const turn = await api.plans.chat({ history: next, facts });
+      setFacts(turn.facts);
+      setReady(turn.ready);
+      setSummary(turn.summary);
+
+      const lines = [turn.note, turn.question?.text].filter(Boolean) as string[];
+      if (lines.length) {
+        setMessages([...next, { role: "assistant", content: lines.join("\n\n") }]);
+      }
+      setQuestion(turn.question);
+      if (turn.researched) {
+        toast.success(`Researched ${turn.facts.race_research?.race_official_name ?? "the course"}`);
+      }
+      turn.warnings.forEach((w) => toast.warning(w, { duration: 6000 }));
+    } catch (e: any) {
+      toast.error(e.detail ?? e.message, { duration: 8000 });
+      // Drop the unanswered turn so the same answer can be retried.
+      setMessages(history);
+    } finally {
+      setThinking(false);
+      setResearching(false);
+    }
+  }
+
+  async function build() {
+    setBuilding(true);
+    try {
+      const result = await api.plans.generateFromChat({ facts, start_date: start });
       toast.success(`Generated by ${result.model_used}`);
       router.push(`/plans/${result.plan.id}`);
     } catch (e: any) {
       toast.error(e.detail ?? e.message, { duration: 8000 });
     } finally {
-      setBusy(false);
+      setBuilding(false);
     }
   }
 
+  const research = facts.race_research as Record<string, any> | undefined;
+  const shown = Object.entries(facts).filter(
+    ([k, v]) => !HIDDEN_FACTS.has(k) && v !== null && v !== "" && !(Array.isArray(v) && !v.length)
+  );
+
   return (
-    <div className="max-w-2xl mx-auto px-8 py-10">
-      <Link href="/" className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground mb-4">
-        <ArrowLeft className="h-4 w-4 mr-1" /> All plans
-      </Link>
-      <h1 className="text-3xl font-bold mb-1">Generate a plan</h1>
-      <p className="text-muted-foreground mb-8">
-        The LLM will read your profile and produce a draft plan. You can edit
-        every workout before pushing to Garmin.
-      </p>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Goal</CardTitle>
-          <CardDescription>One or two sentences. Be specific about target time / event.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Textarea
-            rows={3}
-            placeholder="e.g. Run a sub-1:45 half marathon on July 13. Add 2 strength sessions per week."
-            value={goal}
-            onChange={(e) => setGoal(e.target.value)}
-          />
-        </CardContent>
-      </Card>
-
-      <Card className="mt-4">
-        <CardHeader>
-          <CardTitle>Window</CardTitle>
-          <CardDescription>Plans are structured in Monday-start weeks.</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-2">
-          <div className="grid gap-1">
-            <Label>Start date</Label>
-            <DatePicker value={start} onChange={setStart} placeholder="Pick start date" />
-          </div>
-          <div className="grid gap-1">
-            <Label>End date (race day)</Label>
-            <DatePicker value={end} onChange={setEnd} placeholder="Pick end date" />
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card className="mt-4">
-        <CardHeader>
-          <CardTitle>Volume</CardTitle>
-          <CardDescription>Optional. Leave peak blank to infer from weekly hours target.</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-3">
-          <div className="grid gap-1">
-            <Label htmlFor="startv">Start km/wk</Label>
-            <Input id="startv" type="number" value={startVol} onChange={(e) => setStartVol(Number(e.target.value))} />
-          </div>
-          <div className="grid gap-1">
-            <Label htmlFor="peakv">Peak km/wk</Label>
-            <Input
-              id="peakv"
-              type="number"
-              placeholder="auto"
-              value={peakVol}
-              onChange={(e) => setPeakVol(e.target.value === "" ? "" : Number(e.target.value))}
-            />
-          </div>
-          <div className="grid gap-1">
-            <Label htmlFor="taper">Taper weeks</Label>
-            <Input id="taper" type="number" value={taperWeeks} onChange={(e) => setTaperWeeks(Number(e.target.value))} />
-          </div>
-        </CardContent>
-      </Card>
-
-      <div className="flex justify-end mt-6">
-        <Button onClick={generate} disabled={busy} size="lg">
-          <Sparkles className="h-4 w-4" />
-          {busy ? "Generating… (30-60s)" : "Generate plan"}
+    <div className="max-w-6xl mx-auto px-8 py-10">
+      <div className="flex items-start justify-between mb-6">
+        <div>
+          <Link
+            href="/"
+            className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground mb-3"
+          >
+            <ArrowLeft className="h-4 w-4 mr-1" /> All plans
+          </Link>
+          <h1 className="text-3xl font-bold mb-1">Talk to your coach</h1>
+          <p className="text-muted-foreground">
+            A few questions about your goal, your week and your body — then a plan
+            built around the answers.
+          </p>
+        </div>
+        <Button variant="ghost" size="sm" asChild>
+          <Link href="/plans/new/form">
+            <SlidersHorizontal className="h-4 w-4" /> Skip to the quick form
+          </Link>
         </Button>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-[1fr_320px] items-start">
+        <Card>
+          <CardContent className="pt-6">
+            <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
+              {messages.map((m, i) => (
+                <div
+                  key={i}
+                  className={m.role === "user" ? "flex justify-end" : "flex justify-start"}
+                >
+                  <div
+                    className={
+                      "rounded-2xl px-4 py-2.5 max-w-[85%] text-sm whitespace-pre-wrap " +
+                      (m.role === "user"
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted text-foreground")
+                    }
+                  >
+                    {m.content}
+                  </div>
+                </div>
+              ))}
+
+              {thinking && (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  {researching ? (
+                    <span className="inline-flex items-center gap-1">
+                      <Globe className="h-3.5 w-3.5" /> Looking up the course…
+                    </span>
+                  ) : (
+                    "Thinking…"
+                  )}
+                </div>
+              )}
+              <div ref={bottom} />
+            </div>
+
+            <div className="mt-6 border-t pt-5">
+              {ready ? (
+                <div className="space-y-4">
+                  {summary && <p className="text-sm text-muted-foreground">{summary}</p>}
+                  <div className="grid gap-1 max-w-xs">
+                    <Label>Start date</Label>
+                    <DatePicker value={start} onChange={setStart} placeholder="Pick a start date" />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {facts.race_date
+                        ? `Ends on race day, ${facts.race_date}.`
+                        : "Ends 12 weeks later."}
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button onClick={build} disabled={building} size="lg">
+                      <Sparkles className="h-4 w-4" />
+                      {building ? "Building… (30-60s)" : "Build my plan"}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="lg"
+                      disabled={building}
+                      onClick={() => {
+                        setReady(false);
+                        void send("Actually, ask me a few more questions first.");
+                      }}
+                    >
+                      Ask me more
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <Answer
+                  question={question}
+                  disabled={thinking}
+                  draft={draft}
+                  setDraft={setDraft}
+                  picked={picked}
+                  setPicked={setPicked}
+                  onSend={(a) => void send(a)}
+                />
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="space-y-4">
+          {research && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Mountain className="h-4 w-4" />
+                  {research.race_official_name ?? "The course"}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm">
+                <div className="flex flex-wrap gap-1.5">
+                  {research.profile && <Badge variant="secondary">{research.profile}</Badge>}
+                  {research.surface && <Badge variant="secondary">{research.surface}</Badge>}
+                  {research.elevation_gain_m != null && (
+                    <Badge variant="secondary">{research.elevation_gain_m} m gain</Badge>
+                  )}
+                  {research.confidence === "low" && (
+                    <Badge variant="outline">low confidence</Badge>
+                  )}
+                </div>
+                {research.course_notes && (
+                  <p className="text-muted-foreground">{research.course_notes}</p>
+                )}
+                {research.climate_notes && (
+                  <p className="text-muted-foreground">{research.climate_notes}</p>
+                )}
+                {Array.isArray(research.training_implications) && (
+                  <ul className="list-disc pl-4 space-y-1 text-muted-foreground">
+                    {research.training_implications.map((t: string, i: number) => (
+                      <li key={i}>{t}</li>
+                    ))}
+                  </ul>
+                )}
+                {Array.isArray(research.sources) && research.sources.length > 0 && (
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {research.sources.slice(0, 4).map((u: string, i: number) => (
+                      <a
+                        key={i}
+                        href={u}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                        className="text-xs underline text-muted-foreground hover:text-foreground"
+                      >
+                        source {i + 1}
+                      </a>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">What I know so far</CardTitle>
+            </CardHeader>
+            <CardContent className="text-sm">
+              {shown.length === 0 ? (
+                <p className="text-muted-foreground">Nothing yet — answer the first question.</p>
+              ) : (
+                <dl className="space-y-2">
+                  {shown.map(([k, v]) => (
+                    <div key={k}>
+                      <dt className="text-xs uppercase tracking-wide text-muted-foreground">
+                        {labelFor(k)}
+                      </dt>
+                      <dd className="break-words">{renderValue(v)}</dd>
+                    </div>
+                  ))}
+                </dl>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   );
+}
+
+function Answer({
+  question,
+  disabled,
+  draft,
+  setDraft,
+  picked,
+  setPicked,
+  onSend,
+}: {
+  question: IntakeQuestion | null;
+  disabled: boolean;
+  draft: string;
+  setDraft: (s: string) => void;
+  picked: string[];
+  setPicked: (s: string[]) => void;
+  onSend: (answer: string) => void;
+}) {
+  if (!question) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        {disabled ? "One moment…" : "No question pending."}
+      </p>
+    );
+  }
+
+  const freeText = (
+    <div className="flex gap-2">
+      <Textarea
+        rows={2}
+        value={draft}
+        disabled={disabled}
+        placeholder={question.allow_free_text ? "Type your answer…" : "Your answer"}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !e.shiftKey && draft.trim()) {
+            e.preventDefault();
+            onSend(draft.trim());
+          }
+        }}
+      />
+      <Button disabled={disabled || !draft.trim()} onClick={() => onSend(draft.trim())}>
+        <Send className="h-4 w-4" />
+      </Button>
+    </div>
+  );
+
+  if (question.kind === "single") {
+    return (
+      <div className="space-y-3">
+        <div className="flex flex-wrap gap-2">
+          {question.options.map((o) => (
+            <Button key={o} variant="outline" size="sm" disabled={disabled} onClick={() => onSend(o)}>
+              {o}
+            </Button>
+          ))}
+        </div>
+        {question.allow_free_text && freeText}
+      </div>
+    );
+  }
+
+  if (question.kind === "multi") {
+    const toggle = (o: string) =>
+      setPicked(picked.includes(o) ? picked.filter((x) => x !== o) : [...picked, o]);
+    const answer = [...picked, draft.trim()].filter(Boolean).join(", ");
+    return (
+      <div className="space-y-3">
+        <div className="flex flex-wrap gap-2">
+          {question.options.map((o) => (
+            <Button
+              key={o}
+              variant={picked.includes(o) ? "default" : "outline"}
+              size="sm"
+              disabled={disabled}
+              onClick={() => toggle(o)}
+            >
+              {o}
+            </Button>
+          ))}
+        </div>
+        {question.allow_free_text && (
+          <Input
+            value={draft}
+            disabled={disabled}
+            placeholder="Anything else?"
+            onChange={(e) => setDraft(e.target.value)}
+          />
+        )}
+        <Button disabled={disabled || !answer} onClick={() => onSend(answer)}>
+          <Send className="h-4 w-4" /> Send
+        </Button>
+      </div>
+    );
+  }
+
+  if (question.kind === "number") {
+    return (
+      <div className="flex items-end gap-2">
+        <div className="grid gap-1">
+          {question.unit && <Label className="text-xs">{question.unit}</Label>}
+          <Input
+            type="number"
+            className="w-40"
+            value={draft}
+            disabled={disabled}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && draft.trim()) onSend(`${draft.trim()} ${question.unit ?? ""}`.trim());
+            }}
+          />
+        </div>
+        <Button
+          disabled={disabled || !draft.trim()}
+          onClick={() => onSend(`${draft.trim()} ${question.unit ?? ""}`.trim())}
+        >
+          <Send className="h-4 w-4" /> Send
+        </Button>
+      </div>
+    );
+  }
+
+  if (question.kind === "date") {
+    return (
+      <div className="flex items-end gap-2">
+        <div className="grid gap-1 w-56">
+          <DatePicker value={draft} onChange={setDraft} placeholder="Pick a date" />
+        </div>
+        <Button disabled={disabled || !draft} onClick={() => onSend(draft)}>
+          <Send className="h-4 w-4" /> Send
+        </Button>
+      </div>
+    );
+  }
+
+  return freeText;
 }

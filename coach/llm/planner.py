@@ -48,10 +48,13 @@ def generate_plan(
     start_volume_km: float = 25,
     peak_volume_km: float | None = None,
     taper_weeks: int = 2,
+    intake: dict[str, Any] | None = None,
 ) -> GenerateResult:
     """Generate a plan and persist it. Returns the new plan_id and warnings.
 
     `chat_fn` is injectable for tests; defaults to the real OpenRouter call.
+    `intake` carries the answers (and race course research) from a chat
+    intake, when the plan came from one.
     """
     chat_fn = chat_fn or chat
 
@@ -86,6 +89,7 @@ def generate_plan(
         start_volume_km=start_volume_km,
         peak_volume_km=peak_volume_km,
         taper_weeks=taper_weeks,
+        intake=intake,
     )
 
     result = chat_fn([

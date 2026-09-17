@@ -284,8 +284,14 @@ def build_user_prompt(
     start_volume_km: float = 25,
     peak_volume_km: float | None = None,
     taper_weeks: int = 2,
+    intake: dict[str, Any] | None = None,
 ) -> str:
-    """Assemble the user-side prompt with profile + pre-computed numbers."""
+    """Assemble the user-side prompt with profile + pre-computed numbers.
+
+    `intake` is the fact dict from a chat intake, if one was run. It is
+    rendered ahead of the generation instruction so the athlete's own
+    answers and the race course research outrank the defaults above.
+    """
     weeks = ((end_date - start_date).days // 7) + 1
 
     # Active sports: prefer enabled_sports list; fall back to "running" only
@@ -340,4 +346,245 @@ PER-SPORT BENCHMARKS
 
 {chr(10).join(sport_blocks)}
 
-{volume_section}Generate the plan now as JSON only. Only include sports listed in ENABLED SPORTS."""
+{volume_section}{render_intake_facts(intake or {})}
+Generate the plan now as JSON only. Only include sports listed in ENABLED SPORTS."""
+
+
+# ============================================================ chat intake
+#
+# The intake is a one-question-at-a-time interview that fills a `facts`
+# dict. The LLM sees the facts it has so far plus the stored profile, and
+# returns the single most valuable next question. When the facts are good
+# enough to plan from it sets `ready`, and `build_user_prompt` renders them
+# into the normal generation prompt.
+
+
+# What a good coach would want to know before writing a block. The model
+# picks from this rather than inventing its own agenda, which keeps the
+# interview from wandering or re-asking things the profile already answers.
+INTAKE_CHECKLIST = """
+1.  goal_type — "race", "fitness", "body_composition", "return_from_injury",
+    or "strength_goal". Ask this FIRST if unknown.
+2.  If goal_type is "race": race_name, race_date, race_distance_km,
+    race_target_seconds (or null for "just finish"), race_been_before.
+    Ask for the race BY NAME — the name unlocks course research.
+3.  tune_up_races — earlier races to build into the plan as workouts.
+4.  current_weekly_km and longest_recent_run_km — where the ramp starts.
+    Never guess these; an over-ambitious week 1 is the main way plans fail.
+5.  years_training — training age, for how fast to progress.
+6.  days_per_week and available_days (0=Mon..6=Sun) — the actual calendar.
+7.  session_cap_min — longest single session on a weekday, and on a weekend.
+8.  secondary_sports and sport_priority — what else they keep doing, and
+    what gives way when time is short.
+9.  injuries, niggles, avoid_movements — past injuries and current aches.
+10. equipment — gym, treadmill, track, pool, hills nearby, bike.
+11. terrain_access — what they can actually train on (flat city, trails,
+    hills). Matters most when it mismatches the race course.
+12. blackout_dates — travel, work crunch, holidays: weeks to keep easy.
+13. recovery — sleep hours, stress level, whether they fuel long efforts.
+14. aggressiveness — "conservative", "moderate" or "aggressive" progression.
+15. dealbreakers — hard rules ("never Sundays", "no 5am", "no treadmill").
+"""
+
+
+INTAKE_SYSTEM_PROMPT = f"""You are a head coach doing an intake interview before writing a training plan. You ask ONE question at a time, like a person would, and you build up a structured picture of the athlete.
+
+You output STRUCTURED JSON only. No prose, no markdown, no commentary outside the JSON object.
+
+## What you are trying to learn
+
+{INTAKE_CHECKLIST}
+
+## How to interview
+
+- ONE question per turn. Never batch.
+- Ask the highest-value unknown next. Order matters: goal first, then the
+  race identity, then the athlete's current load, then the calendar, then
+  the constraints, then the nice-to-haves.
+- NEVER ask for something already present in KNOWN FACTS or in the stored
+  PROFILE. If the profile has their 5k time, you know their fitness anchor.
+- If an answer implies other facts, record them. "I run 4 times a week,
+  usually Tue Thu Sat Sun" fills days_per_week AND available_days.
+- If an answer is vague ("a decent amount"), ask one sharpening follow-up,
+  then accept whatever you get and move on.
+- Acknowledge briefly in `note` — one short line reacting to their last
+  answer. This is the only text the athlete reads from you per turn.
+- Once RACE COURSE RESEARCH appears in your context, use it: ask about the
+  specific demands it reveals (a hilly course -> do they have hills to
+  train on; a hot race -> heat acclimation; an early start -> morning runs).
+- Stop when you can write a responsible plan. Perfect information is not
+  the goal — a plan that fits their week is. Set "ready": true then.
+- Set "ready": true immediately if the athlete asks you to stop asking.
+
+## Question shapes
+
+Pick the shape that makes the question easiest to answer:
+- "single"  — pick one of `options`
+- "multi"   — pick any of `options`
+- "text"    — free text
+- "number"  — a number (set `unit`, e.g. "km", "minutes", "years")
+- "date"    — a calendar date
+
+Always offer `options` for single/multi. Keep them short and concrete.
+
+## Output schema
+
+Return EXACTLY this shape:
+
+{{
+  "note": "<one short line reacting to their last answer, or a greeting on turn 1>",
+  "facts": {{ <the FULL merged fact dict: everything known so far plus
+              whatever the last answer just taught you> }},
+  "question": {{
+    "id": "<snake_case key this answer fills, e.g. 'race_name'>",
+    "text": "<the question, one sentence, conversational>",
+    "kind": "single" | "multi" | "text" | "number" | "date",
+    "options": ["<short option>", ...],
+    "unit": "<only for kind=number>",
+    "allow_free_text": true | false
+  }},
+  "ready": false,
+  "summary": "<when ready=true: 2-4 sentences briefing yourself on this
+               athlete and this goal. Otherwise empty string.>"
+}}
+
+`facts` is always the complete merged dict — never a partial patch.
+When "ready" is true, set "question" to null.
+
+Output the JSON object and NOTHING else."""
+
+
+RACE_RESEARCH_SYSTEM_PROMPT = """You research race courses. You are given a race name and date, and web search results about it.
+
+Extract what changes how an athlete should TRAIN for it. Be concrete and numeric where the sources are; use null where they are not. Do not invent numbers — a null is more useful than a guess.
+
+Return EXACTLY this JSON shape and nothing else:
+
+{
+  "race_official_name": "<full name, or the name as given if unconfirmed>",
+  "distance_km": <number or null>,
+  "elevation_gain_m": <number or null>,
+  "profile": "<'flat' | 'rolling' | 'hilly' | 'mountainous' | 'net downhill' | 'unknown'>",
+  "surface": "<'road' | 'trail' | 'track' | 'mixed' | 'unknown'>",
+  "course_notes": "<2-4 sentences: where the climbs and descents fall, the
+                    hardest section and at what km, any technical footing,
+                    laps vs point-to-point, altitude>",
+  "climate_notes": "<typical conditions on that date: temperature, humidity,
+                     wind, sun exposure, start time if known>",
+  "training_implications": ["<short imperative, e.g. 'Practise sustained 4-6% climbs at km 12-18'>", ...],
+  "confidence": "<'high' if sources clearly describe this race, 'low' if
+                  results were thin or ambiguous>",
+  "sources": ["<url>", ...]
+}
+
+If the search results do not actually describe this race, set confidence to "low", leave the numeric fields null, and say so in course_notes. Output the JSON object and NOTHING else."""
+
+
+def build_intake_prompt(
+    *,
+    history: list[dict[str, str]],
+    facts: dict[str, Any],
+    profile: dict[str, Any],
+    questions_asked: int,
+    max_questions: int,
+) -> str:
+    """Assemble the intake turn prompt: profile + facts so far + transcript."""
+    import json as _json
+
+    known = {k: v for k, v in facts.items() if v not in (None, "", [], {})}
+    research = known.pop("race_research", None)
+
+    lines = [
+        f"TODAY: {date.today().isoformat()}",
+        "",
+        "STORED PROFILE (already known — do NOT ask for any of this)",
+        _json.dumps(_profile_digest(profile), indent=2),
+        "",
+        "KNOWN FACTS SO FAR",
+        _json.dumps(known, indent=2) if known else "(nothing yet — this is turn 1)",
+    ]
+
+    if research:
+        lines += [
+            "",
+            "RACE COURSE RESEARCH (from web search — use it to sharpen your "
+            "remaining questions)",
+            _json.dumps(research, indent=2),
+        ]
+
+    if history:
+        lines += ["", "TRANSCRIPT"]
+        lines += [f"{m['role'].upper()}: {m['content']}" for m in history]
+
+    remaining = max_questions - questions_asked
+    lines += [
+        "",
+        f"You have asked {questions_asked} question(s). At most {remaining} remain.",
+    ]
+    if remaining <= 2:
+        lines.append(
+            "You are nearly out of questions. Ask only something you cannot "
+            "write a safe plan without, otherwise set ready=true now."
+        )
+    lines.append("Return the next turn as JSON.")
+    return "\n".join(lines)
+
+
+def build_race_research_prompt(race_name: str, race_date: str | None) -> str:
+    """Prompt for the web-search-backed course research call."""
+    when = f" taking place on {race_date}" if race_date else ""
+    return (
+        f"Research the race '{race_name}'{when}.\n\n"
+        "Find its course profile: total elevation gain, where the climbs and "
+        "descents fall, the surface, altitude, and the typical weather on "
+        "that date. Then return the JSON object."
+    )
+
+
+def _profile_digest(profile: dict[str, Any]) -> dict[str, Any]:
+    """The parts of the stored profile the interviewer must not re-ask."""
+    return {
+        "name": profile.get("name"),
+        "recent_5k": _fmt_5k(profile.get("recent_5k_seconds")),
+        "threshold_hr": profile.get("threshold_hr"),
+        "max_hr": profile.get("max_hr"),
+        "enabled_sports": profile.get("enabled_sports") or [],
+        "sport_profiles": profile.get("sport_profiles") or {},
+        "preferred_days": profile.get("preferred_days") or {},
+        "weekly_hours_target": profile.get("weekly_hours_target"),
+        "notes": profile.get("notes"),
+    }
+
+
+def render_intake_facts(facts: dict[str, Any]) -> str:
+    """Render intake facts as a prompt block for plan generation.
+
+    Course research gets its own section because it is the one input that
+    should visibly change the workouts (hill reps for a hilly race, heat
+    work for a hot one) — burying it in a JSON dump gets it ignored.
+    """
+    import json as _json
+
+    facts = dict(facts)
+    research = facts.pop("race_research", None)
+    summary = facts.pop("_summary", None)
+
+    known = {k: v for k, v in facts.items() if v not in (None, "", [], {})}
+    if not known and not research:
+        return ""
+
+    out = ["INTAKE INTERVIEW FINDINGS", "These came from the athlete directly. They override defaults.", ""]
+    if summary:
+        out += [f"Coach's brief: {summary}", ""]
+    if known:
+        out += [_json.dumps(known, indent=2), ""]
+
+    if research:
+        out += [
+            "RACE COURSE RESEARCH",
+            "Shape the plan around this course. Prescribe the specific demands "
+            "it names — do not write a generic flat-road plan for a hilly race.",
+            _json.dumps(research, indent=2),
+            "",
+        ]
+    return "\n".join(out)

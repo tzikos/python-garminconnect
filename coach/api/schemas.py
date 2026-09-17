@@ -159,3 +159,44 @@ class SetOpenRouter(BaseModel):
 class PrimitiveDef(BaseModel):
     name: str
     params: list[str]
+
+
+class ChatMessage(BaseModel):
+    role: str  # "assistant" (a question we asked) | "user" (their answer)
+    content: str
+
+
+class IntakeQuestion(BaseModel):
+    id: str
+    text: str
+    kind: str  # single | multi | text | number | date
+    options: list[str] = []
+    unit: Optional[str] = None
+    allow_free_text: bool = True
+
+
+class IntakeRequest(BaseModel):
+    history: list[ChatMessage] = []
+    facts: dict[str, Any] = {}
+
+
+class IntakeResponse(BaseModel):
+    note: str
+    facts: dict[str, Any]
+    question: Optional[IntakeQuestion] = None
+    ready: bool
+    summary: str
+    model_used: str
+    researched: bool = False
+    warnings: list[str] = []
+
+
+class GenerateFromChatRequest(BaseModel):
+    facts: dict[str, Any]
+    start_date: datetime.date
+    # Falls back to the race date the interview found, then to +12 weeks.
+    end_date: Optional[datetime.date] = None
+    goal_text: Optional[str] = None
+    start_volume_km: Optional[float] = None
+    peak_volume_km: Optional[float] = None
+    taper_weeks: int = 2
