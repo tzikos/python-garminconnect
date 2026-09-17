@@ -103,13 +103,17 @@ def test_unknown_question_kind_falls_back_to_text():
     assert turn.question["options"] == []
 
 
-def test_textless_question_is_dropped():
-    turn = next_turn(
-        history=[],
-        profile=PROFILE,
-        chat_fn=_stub(_turn_json(question={"id": "x", "kind": "text"})),
-    )
-    assert turn.question is None
+def test_a_turn_with_nothing_to_ask_falls_back_to_an_open_question():
+    """Neither a question nor ready would dead-end the UI."""
+    for bad in (None, {"id": "x", "kind": "text"}):  # missing, and textless
+        turn = next_turn(
+            history=[],
+            profile=PROFILE,
+            chat_fn=_stub(_turn_json(question=bad)),
+        )
+        assert turn.ready is False
+        assert turn.question["id"] == "anything_else"
+        assert turn.question["kind"] == "text"
 
 
 def test_fenced_json_is_parsed():
@@ -236,3 +240,18 @@ def test_all_documented_question_kinds_pass_through(kind):
         })),
     )
     assert turn.question["kind"] == kind
+
+
+def test_profile_fields_echoed_back_are_not_kept_as_intake_facts():
+    """Models copy the profile context into `facts`; it belongs in the profile."""
+    turn = next_turn(
+        history=[],
+        profile=PROFILE,
+        chat_fn=_stub(_turn_json(facts={
+            "name": "Tzikos",
+            "recent_5k": "22:30",
+            "enabled_sports": ["running"],
+            "goal_type": "race",
+        })),
+    )
+    assert turn.facts == {"goal_type": "race"}

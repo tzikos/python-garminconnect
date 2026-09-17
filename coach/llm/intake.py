@@ -85,7 +85,7 @@ def next_turn(
     parsed = _parse_json(result.content)
 
     # Never let the model drop facts we already hold: merge over, don't replace.
-    merged = {**facts, **(parsed.get("facts") or {})}
+    merged = {**facts, **_drop_profile_echo(parsed.get("facts") or {})}
     question = parsed.get("question") or None
     ready = bool(parsed.get("ready"))
 
@@ -107,13 +107,21 @@ def next_turn(
         if research_warning:
             warnings.append(research_warning)
 
+    question = _clean_question(question) if not ready else None
+
+    # A turn with neither a question nor `ready` dead-ends the UI: nothing to
+    # answer, nothing to build. Weaker free models do this. Keep the
+    # conversation alive with an open question rather than stranding the user.
+    if not ready and question is None:
+        question = dict(_OPEN_QUESTION)
+
     if ready:
         merged["_summary"] = parsed.get("summary") or ""
 
     return IntakeTurn(
         note=str(parsed.get("note") or ""),
         facts=merged,
-        question=_clean_question(question) if not ready else None,
+        question=question,
         ready=ready,
         summary=str(parsed.get("summary") or ""),
         model_used=result.model_used,
@@ -160,10 +168,42 @@ def research_race(
     return research, None
 
 
+# The profile is shown to the interviewer as context, and models tend to
+# copy it straight back into `facts`. These live in the profile, so echoing
+# them clutters the UI's fact panel and grows the prompt every turn.
+_PROFILE_ECHO = frozenset({
+    "name",
+    "recent_5k",
+    "recent_5k_seconds",
+    "threshold_hr",
+    "max_hr",
+    "enabled_sports",
+    "sport_profiles",
+    "preferred_days",
+    "weekly_hours_target",
+    "notes",
+})
+
+
+def _drop_profile_echo(facts: dict[str, Any]) -> dict[str, Any]:
+    """Strip profile fields the model copied back into the fact dict."""
+    return {k: v for k, v in facts.items() if k not in _PROFILE_ECHO}
+
+
 def _should_research(facts: dict[str, Any]) -> bool:
     """True once we know the race name and haven't looked it up yet."""
     return bool(facts.get("race_name")) and "race_research" not in facts
 
+
+# Used when a turn comes back with nothing to ask and no "ready" flag.
+_OPEN_QUESTION = {
+    "id": "anything_else",
+    "text": "Anything else about your training, your week or your body that I should know?",
+    "kind": "text",
+    "options": [],
+    "unit": None,
+    "allow_free_text": True,
+}
 
 _ALLOWED_KINDS = {"single", "multi", "text", "number", "date"}
 

@@ -60,6 +60,9 @@ module = [
     "test_coach_sync",
     "test_coach_llm",
     "test_coach_plan_io",
+    "test_coach_intake",
+    "test_coach_api_chat",
+    "test_coach_openrouter",
     "conftest",
 ]
 disallow_untyped_defs = false
