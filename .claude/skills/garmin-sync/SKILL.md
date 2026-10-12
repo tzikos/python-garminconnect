@@ -5,14 +5,19 @@ description: Getting workouts onto and off the Garmin watch — what push and un
 
 # Pushing to Garmin
 
-Everything else in this repo is local. These two commands are the only ones
-that reach Garmin Connect and change what the athlete sees on their watch.
+These two commands change what the athlete sees on their watch.
+`coach review fetch` also contacts Garmin, but only reads activity evidence.
 
 ```bash
 uv run coach sync push --plan-id 3 --dry-run   # list what would upload, no API calls
 uv run coach sync push --plan-id 3 --yes       # upload + schedule
 uv run coach sync unpush --plan-id 3 --yes     # remove from Garmin
 ```
+
+For `/refine`, use `--from-date YYYY-MM-DD` on both push and unpush to limit
+operations to the future period. Unpush also supports `--dry-run`. It removes
+all uploaded sessions on/after that cutoff, including unchanged ones that will
+need re-uploading. Never use an unbounded sync to apply a future-only revision.
 
 `--yes` exists because the plain command asks for confirmation on a TTY,
 which aborts when a tool runs it. **Ask the athlete before passing `--yes`** —
@@ -51,7 +56,8 @@ planned ──push──> uploaded ──unpush──> planned
 ## Authentication
 
 The Garmin client reads the email from the stored profile and the password
-from the OS keychain, caching session tokens in `~/.garminconnect`.
+from the OS keychain, caching session tokens in `~/.garmin-coach/garth` (or
+`$GARMIN_COACH_HOME/garth` when configured).
 
 ```bash
 uv run coach secrets set-garmin-password    # prompts; never pass on argv

@@ -27,7 +27,8 @@ you (interview, research, design)
 - **SQLite** at `~/.garmin-coach/coach.db` holds profiles, plans and workouts.
   `coach plan export <id>` round-trips a plan back to JSON for editing.
 - **Garmin Connect** is written to only by `coach sync push` / `sync unpush`.
-  Every other command is local.
+  `coach review fetch` reads completed activities without changing Garmin's
+  workouts or calendar. Other commands are local.
 - **Credentials** live in the OS keychain (`coach secrets set-garmin-password`).
   Never put a password in a file, a command line, or a commit.
 
@@ -38,6 +39,8 @@ you (interview, research, design)
 | `/newplan` | Interview, research the race, design the plan, save it |
 | `/plans` | List plans, or show one week by week |
 | `/adjust` | Change an existing plan (injury, travel, missed weeks) |
+| `/evaluate` | Evaluate completed activities, skipping saved evaluations |
+| `/refine` | Adapt future sessions from completed training and evaluations |
 | `/push` | Upload a plan to Garmin so it appears on the watch |
 | `/unpush` | Remove an uploaded plan from Garmin |
 | `/profile` | View or update the athlete profile |
@@ -45,6 +48,15 @@ you (interview, research, design)
 Skills carry the reference material: `workout-design` (primitives, coaching
 rules, the plan JSON schema) and `garmin-sync` (upload mechanics and failure
 modes). Read the relevant one before writing a plan or touching Garmin.
+`evaluate` and `refine` carry the review workflows. Workout design's shared
+aerobic reference applies to new plans, adjustments and refinements alike.
+
+Activity evidence and evaluations live in SQLite, keyed by plan and Garmin
+activity ID. `coach review fetch` reads Garmin; `review list` and `review record`
+are local. Fetching alone never marks an activity evaluated. Use `coach plan
+refine` for future changes that retain elapsed workout rows and revision
+history; full `plan import --plan-id` replaces all rows. For refinement sync,
+use the same `--from-date` cutoff on push and unpush.
 
 ## Working rules
 

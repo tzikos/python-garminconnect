@@ -11,6 +11,11 @@ it, `coach sync push` turns each workout into a Garmin workout on the watch.
 Everything the watch will show comes from `primitive_type` +
 `primitive_params`. Get those right and the rest is bookkeeping.
 
+Read [the aerobic training approach](references/aerobic-training.md) when
+building, evaluating or refining endurance training. It captures the athlete's
+preferred 10–14-day intensity rotation, progression, VO2 blocks, recovery and
+durability, mapped to the supported primitives.
+
 ## The five primitives
 
 `primitive_type` must be EXACTLY one of these. There are no others, and sport
@@ -35,7 +40,9 @@ tempo_run(tempo_min, warmup_min=15, cooldown_min=10,
 interval_session(reps, work_min, recovery_min, warmup_min=15, cooldown_min=10,
                  work_pace_min_per_km?, work_pace_max_per_km?,
                  recovery_pace_min_per_km?, recovery_pace_max_per_km?)
-    N x (work / recovery). "interval" zone for work, "easy" for recovery.
+    N x (work / recovery). Work zone follows the stimulus: threshold for
+    threshold reps, interval for VO2, effort cues for short strides.
+    Work/recovery minutes may be fractional; recovery is easy.
 
 strength_session(duration_min, exercises)
     Strength OR calisthenics. Each exercise is:
@@ -85,8 +92,12 @@ Both `duration_min` and `exercises` are required for `strength_session`.
 ## Coaching rules
 
 ### Running
-- ≤10% weekly volume increase. Every 4th week deloads to ~70% of the previous.
-- Long run on the weekend; quality (tempo/intervals) Tue and Thu.
+- ≤10% weekly volume increase as a ceiling, anchored to actual tolerated load.
+  Every 4th week normally deloads to ~70% of the previous; recovery may require
+  earlier reductions. Progression is earned, not automatic.
+- Weekend long run and Tue/Thu quality are defaults; respect the calendar.
+  Use up to two quality days with variety across 10–14 days as described in
+  the aerobic reference. Most running stays easy.
 - Easy runs between hard sessions. Never two hard runs back to back.
 
 ### Strength (weights)

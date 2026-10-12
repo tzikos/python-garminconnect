@@ -86,6 +86,7 @@ class Plan(Base):
     workouts: Mapped[list[ScheduledWorkout]] = relationship(
         back_populates="plan", cascade="all, delete-orphan"
     )
+    reviews: Mapped[list[ActivityReview]] = relationship(cascade="all, delete-orphan")
 
 
 class ScheduledWorkout(Base):
@@ -146,3 +147,20 @@ class IntakeConversation(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now()
     )
+
+
+class ActivityReview(Base):
+    """Cached Garmin evidence and a durable, plan-scoped coaching evaluation.
+
+    Activity IDs survive plan edits. Planned workout context is a snapshot,
+    not a foreign key to a row that a later import might replace.
+    """
+
+    __tablename__ = "activity_review"
+
+    plan_id: Mapped[int] = mapped_column(ForeignKey("plan.id"), primary_key=True)
+    activity_id: Mapped[int] = mapped_column(primary_key=True)
+    activity_date: Mapped[date] = mapped_column(Date)
+    evidence: Mapped[dict[str, Any]] = mapped_column(JSON)
+    evaluation: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    evaluated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

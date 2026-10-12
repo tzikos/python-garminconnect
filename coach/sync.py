@@ -6,14 +6,14 @@ Flow per ScheduledWorkout (status="planned"):
   3. Schedule via Garmin.schedule_workout(workoutId, date)
   4. Persist garmin_workout_id + garmin_schedule_id, set status="uploaded"
 
-Re-running this is safe: rows already at status="uploaded" are skipped.
-The "overwrite an existing plan" flow (delete + re-push) is a future
-concern — for now, a re-plan implies a new Plan row.
+Rows outside an optional from_date cutoff and rows not at status="planned"
+are skipped. Refinement uses the cutoff to leave elapsed training alone.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select
@@ -42,7 +42,7 @@ class UnpushResult:
     failed: list[tuple[int, str]]
 
 
-def push_plan(plan_id: int, api: Garmin) -> SyncResult:
+def push_plan(plan_id: int, api: Garmin, *, from_date: date | None = None) -> SyncResult:
     """Upload + schedule every "planned" workout in `plan_id`."""
     uploaded = 0
     skipped = 0
@@ -60,7 +60,7 @@ def push_plan(plan_id: int, api: Garmin) -> SyncResult:
         ).scalars().all()
 
         for row in rows:
-            if row.status == "uploaded":
+            if row.status != "planned" or (from_date is not None and row.date < from_date):
                 skipped += 1
                 continue
 
@@ -93,7 +93,7 @@ def push_plan(plan_id: int, api: Garmin) -> SyncResult:
     )
 
 
-def unpush_plan(plan_id: int, api: Garmin) -> UnpushResult:
+def unpush_plan(plan_id: int, api: Garmin, *, from_date: date | None = None) -> UnpushResult:
     """Reverse a push: unschedule + delete every uploaded workout in the plan.
 
     For each row at status="uploaded":
@@ -120,7 +120,11 @@ def unpush_plan(plan_id: int, api: Garmin) -> UnpushResult:
         ).scalars().all()
 
         for row in rows:
-            if row.status != "uploaded" or row.garmin_workout_id is None:
+            if (
+                row.status != "uploaded"
+                or row.garmin_workout_id is None
+                or (from_date is not None and row.date < from_date)
+            ):
                 skipped += 1
                 continue
             try:

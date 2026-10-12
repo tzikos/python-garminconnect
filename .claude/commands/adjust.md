@@ -26,7 +26,9 @@ Read the `workout-design` skill before editing.
 
 4. If the plan has uploaded workouts, `unpush` first — import refuses to
    overwrite them.
-5. Re-import over the same plan so the id and history survive:
+5. Re-import over the same plan ID. This replaces workout rows; saved activity
+   evaluations retain their prescription snapshots. For evidence-based future
+   changes that must preserve past workout rows, use `/refine` instead:
    ```bash
    uv run coach plan import /tmp/plan.json --plan-id <id>
    ```

@@ -78,6 +78,7 @@ def export_plan(plan_id: int) -> dict[str, Any]:
         by_week: dict[int, list[dict[str, Any]]] = {}
         for r in rows:
             by_week.setdefault(r.week_number, []).append({
+                "workout_id": r.id,
                 "date": r.date.isoformat(),
                 "sport": r.sport,
                 "primitive_type": r.primitive_type,
@@ -97,6 +98,8 @@ def export_plan(plan_id: int) -> dict[str, Any]:
             })
 
         return {
+            "plan_id": plan.id,
+            "version": plan.version,
             "name": plan.name,
             "goal_text": plan.goal_text,
             "start_date": plan.start_date.isoformat(),
@@ -158,7 +161,7 @@ def import_plan(
             )
             s.add(plan)
 
-        plan.structure = {"weeks": [
+        plan.structure = {**(plan.structure or {}), "weeks": [
             {k: v for k, v in week.items() if k != "workouts"}
             for week in plan_dict["weekly_structure"]
         ]}

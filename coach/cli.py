@@ -20,10 +20,14 @@ profile_app = typer.Typer(no_args_is_help=True, help="Manage your user profile."
 plan_app = typer.Typer(no_args_is_help=True, help="View and manage training plans.")
 secrets_app = typer.Typer(no_args_is_help=True, help="Manage credentials in keyring.")
 sync_app = typer.Typer(no_args_is_help=True, help="Push plans to Garmin Connect.")
+review_app = typer.Typer(
+    no_args_is_help=True, help="Collect activities and save coaching evaluations."
+)
 app.add_typer(profile_app, name="profile")
 app.add_typer(plan_app, name="plan")
 app.add_typer(secrets_app, name="secrets")
 app.add_typer(sync_app, name="sync")
+app.add_typer(review_app, name="review")
 
 
 # ----------------------------------------------------------------- init
@@ -369,6 +373,7 @@ def plan_delete(
     yes: Annotated[bool, typer.Option("--yes", help="Skip confirmation.")] = False,
 ) -> None:
     """Delete a plan and its workouts (local DB only — does NOT remove from Garmin)."""
+    init_db()  # Ensure the review table exists for cascading deletion on older installs.
     with session() as s:
         plan = s.get(Plan, plan_id)
         if plan is None:
@@ -384,12 +389,89 @@ def plan_delete(
     typer.echo(f"Deleted plan {plan_id}.")
 
 
+# ---------------------------------------------------------- evaluations
+
+
+@review_app.command("fetch")
+def review_fetch(plan_id: Annotated[int, typer.Option("--plan-id")]) -> None:
+    """Read Garmin activities in the elapsed plan period; skip evaluated IDs."""
+    from coach.garmin_client import get_client
+    from coach.review import fetch_pending
+
+    init_db()
+    try:
+        result = fetch_pending(plan_id, get_client())
+    except (ValueError, RuntimeError) as exc:
+        typer.echo(str(exc))
+        raise typer.Exit(code=1) from exc
+    typer.echo(json.dumps(result, indent=2))
+
+
+@review_app.command("list")
+def review_list(plan_id: Annotated[int, typer.Option("--plan-id")]) -> None:
+    """Show saved evidence and evaluations without contacting Garmin."""
+    from coach.review import list_reviews
+
+    init_db()
+    try:
+        result = list_reviews(plan_id)
+    except ValueError as exc:
+        typer.echo(str(exc))
+        raise typer.Exit(code=1) from exc
+    typer.echo(json.dumps(result, indent=2))
+
+
+@review_app.command("record")
+def review_record(
+    file: Annotated[str, typer.Argument(help="JSON list of completed evaluations.")],
+    plan_id: Annotated[int, typer.Option("--plan-id")],
+) -> None:
+    """Save agent-written evaluations locally, skipping already evaluated IDs."""
+    from pathlib import Path
+
+    from coach.review import save_evaluations
+
+    init_db()
+    try:
+        result = save_evaluations(plan_id, json.loads(Path(file).read_text()))
+    except (OSError, ValueError) as exc:
+        typer.echo(str(exc))
+        raise typer.Exit(code=1) from exc
+    typer.echo(json.dumps(result))
+
+
+@plan_app.command("refine")
+def plan_refine(
+    file: Annotated[str, typer.Argument(help="Edited full plan export with refinement_reason.")],
+    plan_id: Annotated[int, typer.Option("--plan-id")],
+    from_date: Annotated[str, typer.Option("--from-date", help="First revised date, after today.")],
+    dry_run: Annotated[bool, typer.Option("--dry-run")] = False,
+) -> None:
+    """Preview or save future changes while retaining training history."""
+    from pathlib import Path
+
+    from coach.refine import refine_plan
+
+    try:
+        result = refine_plan(
+            plan_id, json.loads(Path(file).read_text()),
+            _parse_date(from_date), dry_run=dry_run,
+        )
+    except (OSError, ValueError) as exc:
+        typer.echo(str(exc))
+        raise typer.Exit(code=1) from exc
+    typer.echo(json.dumps(result, indent=2))
+
+
 # ----------------------------------------------------------------- sync
 
 
 @sync_app.command("push")
 def sync_push(
     plan_id: Annotated[int, typer.Option("--plan-id")],
+    from_date: Annotated[
+        str | None, typer.Option("--from-date", help="Only sync on/after YYYY-MM-DD.")
+    ] = None,
     dry_run: Annotated[
         bool,
         typer.Option("--dry-run", help="Show what would be uploaded; no API calls."),
@@ -398,6 +480,8 @@ def sync_push(
 ) -> None:
     """Upload + schedule every planned workout in the plan."""
     from coach.sync import push_plan
+
+    cutoff = _parse_date(from_date) if from_date else None
 
     with session() as s:
         plan = s.get(Plan, plan_id)
@@ -411,6 +495,7 @@ def sync_push(
             .order_by(ScheduledWorkout.date)
         ).scalars().all()
 
+    rows = [row for row in rows if cutoff is None or row.date >= cutoff]
     if not rows:
         typer.echo("Nothing to push: no workouts with status=planned.")
         return
@@ -431,7 +516,7 @@ def sync_push(
     from coach.garmin_client import get_client
 
     api = get_client()
-    result = push_plan(plan_id, api)
+    result = push_plan(plan_id, api, from_date=cutoff)
     typer.echo(
         f"\nUploaded: {result.uploaded}  "
         f"Skipped: {result.skipped}  "
@@ -444,6 +529,10 @@ def sync_push(
 @sync_app.command("unpush")
 def sync_unpush(
     plan_id: Annotated[int, typer.Option("--plan-id")],
+    from_date: Annotated[
+        str | None, typer.Option("--from-date", help="Only remove on/after YYYY-MM-DD.")
+    ] = None,
+    dry_run: Annotated[bool, typer.Option("--dry-run")] = False,
     yes: Annotated[bool, typer.Option("--yes", help="Skip confirmation.")] = False,
 ) -> None:
     """Remove every uploaded workout in this plan from Garmin.
@@ -452,6 +541,8 @@ def sync_unpush(
     library. Rows revert to status='planned' so they can be re-pushed.
     """
     from coach.sync import unpush_plan
+
+    cutoff = _parse_date(from_date) if from_date else None
 
     with session() as s:
         plan = s.get(Plan, plan_id)
@@ -465,6 +556,7 @@ def sync_unpush(
             .order_by(ScheduledWorkout.date)
         ).scalars().all()
 
+    rows = [row for row in rows if cutoff is None or row.date >= cutoff]
     if not rows:
         typer.echo("Nothing to unpush: no workouts with status=uploaded.")
         return
@@ -476,13 +568,17 @@ def sync_unpush(
             f"#{r.garmin_workout_id}"
         )
 
+    if dry_run:
+        typer.echo("(dry-run; no removal performed)")
+        return
+
     if not yes:
         typer.confirm("\nRemove from Garmin?", abort=True, default=False)
 
     from coach.garmin_client import get_client
 
     api = get_client()
-    result = unpush_plan(plan_id, api)
+    result = unpush_plan(plan_id, api, from_date=cutoff)
     typer.echo(
         f"\nRemoved: {result.removed}  "
         f"Skipped: {result.skipped}  "

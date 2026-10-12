@@ -83,3 +83,5 @@ End with what they can do next, and do not do it for them:
 
 > Plan 4 saved — 11 weeks, 58 workouts, ending on race day.
 > `/push` to send it to your watch, `/adjust` to change anything first.
+> Once training starts: `/evaluate` to review completed sessions, `/refine`
+> to adapt the remaining program to those results.
