@@ -51,6 +51,11 @@ modes). Read the relevant one before writing a plan or touching Garmin.
 `evaluate` and `refine` carry the review workflows. Workout design's shared
 aerobic reference applies to new plans, adjustments and refinements alike.
 
+`coach analysis sync` keeps a plan-independent store of every Garmin
+activity (full streams) and daily wellness, with derived performance markers;
+`/evaluate` runs it, `coach analysis recompute` rebuilds markers after a
+formula change, and the web app's Analysis page charts it.
+
 Activity evidence and evaluations live in SQLite, keyed by plan and Garmin
 activity ID. `coach review fetch` reads Garmin; `review list` and `review record`
 are local. Fetching alone never marks an activity evaluated. Use `coach plan

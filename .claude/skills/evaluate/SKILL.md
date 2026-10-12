@@ -23,7 +23,21 @@ and its aerobic-training reference to interpret the intended stimulus.
    activity-local dates), including unscheduled sessions and late uploads.
    The library paginates; evaluated IDs are skipped before detail/split calls.
    Do not replace this with a latest-N activities query.
-5. Inspect top-level `errors` and each activity's `evidence.errors`. Missing
+5. Run `uv run coach analysis sync`, then
+   `uv run coach analysis show --from <7 days before the oldest pending activity>`.
+   Sync stores every new Garmin activity (full sample streams, laps, weather)
+   and each day's resting HR, HRV, sleep and body battery, independent of
+   plans; it is read-only on Garmin and skips what is already stored. Show
+   returns derived markers per activity: `ef` (grade-adjusted speed ÷ HR
+   after a 15-min warm-up; absent when < 10 min remain), `decoupling_pct`, `drift_onset_min`,
+   `gct_delta_ms`, `hrr60_mean`, `pace_cv`, `elev_per_km`, `temp_c`,
+   `structured`. Use them as evidence alongside the context fields: compare
+   EF and decoupling only with past sessions of similar duration, terrain,
+   steadiness and temperature (`analysis show` over a longer window gives
+   the history). Read wellness (rising resting HR, HRV below its balanced
+   band) before calling HR drift lost fitness. A sync failure does not
+   block the evaluation; say the markers are missing.
+6. Inspect top-level `errors` and each activity's `evidence.errors`. Missing
    splits may permit a qualified summary assessment; insufficient evidence
    means leave the activity pending. Failed fetching is not proof that no
    training occurred. Future plans and empty periods have nothing to evaluate.

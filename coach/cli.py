@@ -28,6 +28,10 @@ app.add_typer(plan_app, name="plan")
 app.add_typer(secrets_app, name="secrets")
 app.add_typer(sync_app, name="sync")
 app.add_typer(review_app, name="review")
+analysis_app = typer.Typer(
+    no_args_is_help=True, help="Store all activities and derived performance metrics."
+)
+app.add_typer(analysis_app, name="analysis")
 
 
 # ----------------------------------------------------------------- init
@@ -438,6 +442,60 @@ def review_record(
         typer.echo(str(exc))
         raise typer.Exit(code=1) from exc
     typer.echo(json.dumps(result))
+
+
+# ------------------------------------------------------------- analysis
+
+
+@analysis_app.command("sync")
+def analysis_sync(
+    since: Annotated[
+        str | None, typer.Option(help="YYYY-MM-DD. Default: everything new.")
+    ] = None,
+    force: Annotated[bool, typer.Option(help="Refetch activities already stored.")] = False,
+    wellness: Annotated[bool, typer.Option(help="Also fetch daily wellness.")] = True,
+) -> None:
+    """Read new Garmin activities and wellness days into the local store."""
+    from coach.analysis import sync
+    from coach.garmin_client import get_client
+
+    init_db()
+    result = sync(
+        get_client(),
+        since=date.fromisoformat(since) if since else None,
+        force=force,
+        wellness=wellness,
+    )
+    typer.echo(json.dumps(result, indent=2))
+
+
+@analysis_app.command("recompute")
+def analysis_recompute() -> None:
+    """Rebuild derived metrics from stored streams (no Garmin calls)."""
+    from coach.analysis import recompute
+
+    init_db()
+    typer.echo(f"Recomputed {recompute()} activities.")
+
+
+@analysis_app.command("show")
+def analysis_show(
+    start: Annotated[str | None, typer.Option("--from", help="YYYY-MM-DD")] = None,
+    end: Annotated[str | None, typer.Option("--to", help="YYYY-MM-DD")] = None,
+    sport: Annotated[str | None, typer.Option(help="e.g. running, cycling")] = None,
+    wellness: Annotated[bool, typer.Option(help="Include daily wellness.")] = True,
+) -> None:
+    """Print stored activity metrics (and wellness) as JSON."""
+    from coach.analysis import list_activities, list_wellness
+
+    init_db()
+    a = date.fromisoformat(start) if start else None
+    b = date.fromisoformat(end) if end else None
+    acts = [x for x in list_activities(a, b) if sport in (None, x["sport"])]
+    out: dict = {"activities": acts}
+    if wellness:
+        out["wellness"] = list_wellness(a, b)
+    typer.echo(json.dumps(out, indent=2))
 
 
 @plan_app.command("refine")

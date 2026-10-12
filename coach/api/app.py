@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from coach.api.routes import plans, profile, settings, sync, workouts
+from coach.api.routes import analysis, plans, profile, settings, sync, workouts
 from coach.db import init_db
 
 
@@ -31,6 +31,7 @@ def create_app() -> FastAPI:
     app.include_router(workouts.router)
     app.include_router(sync.router)
     app.include_router(settings.router)
+    app.include_router(analysis.router)
 
     @app.get("/api/health")
     def health() -> dict[str, str]:
