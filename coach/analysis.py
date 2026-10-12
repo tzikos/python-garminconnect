@@ -25,7 +25,7 @@ from sqlalchemy import func, select
 from coach.db import session
 from coach.models import Activity, WellnessDay
 
-METRICS_VERSION = 3
+METRICS_VERSION = 4
 BIN_S = 60
 WARMUP_BINS = 15  # moving minutes skipped before any efficiency measure
 BASELINE_BINS = 10  # minutes 15-25: reference for drift onset and GCT creep
@@ -33,7 +33,13 @@ MIN_CORE_BINS = 10  # post-warm-up minutes needed to report efficiency
 DRIFT_THRESHOLD = 0.03  # EF drop vs. baseline that marks drift onset
 MOVING_SPEED = 0.5  # m/s
 DRIFT_PERSIST = 5  # consecutive minutes below threshold before calling onset
-STRUCTURED_LAPS = {"WARMUP", "ACTIVE", "RECOVERY", "REST", "COOLDOWN"}
+WORKOUT_LAPS = {"WARMUP", "ACTIVE", "RECOVERY", "REST", "COOLDOWN"}
+# Interval detection works on lap paces, so freestyle sessions with manual
+# laps count too (Garmin labels those, and every auto-lap, "INTERVAL").
+REP_SPEED_RATIO = 1.25  # work lap at least 25% faster than the lap after it
+REP_WORK_S = (30, 600)
+REP_RECOVERY_S = (20, 600)  # min skips stray lap presses; max lets a cool-down count
+MIN_REPS = 3
 
 RUN_TYPES = {"running", "trail_running", "treadmill_running", "track_running"}
 RIDE_TYPES = {
@@ -190,7 +196,7 @@ def stream_metrics(cols: dict[str, list[Any]], sport: str) -> dict[str, Any]:
     # Drift onset: first minute whose 5-min rolling EF stays more than 3%
     # under the min 15-25 baseline for DRIFT_PERSIST minutes in a row.
     # ponytail: assumes a steady target; on intervals it is noise, which is
-    # why pace_cv and structured travel alongside it.
+    # why pace_cv and intervals travel alongside it.
     base_end = WARMUP_BINS + BASELINE_BINS
     if len(moving) >= base_end + 10:
         base = _ratio(moving[WARMUP_BINS:base_end], basis)
@@ -227,12 +233,36 @@ def _gmt_ms(text: str) -> float:
     )
 
 
+def _lap_speed(lap: dict[str, Any]) -> float:
+    # Raw speed: grade-adjusted speed is inflated on slow jog/standing laps,
+    # which hides the work/recovery contrast.
+    return lap.get("averageSpeed") or 0.0
+
+
+def interval_reps(laps: dict[str, Any] | None) -> list[tuple[dict, dict]]:
+    """(work lap, recovery lap) pairs: a short lap clearly faster than the next.
+
+    ponytail: lap-based, so a fartlek with no lap presses is not detected.
+    """
+    lap_list = (laps or {}).get("lapDTOs") or []
+    reps = []
+    for work, rec in zip(lap_list, lap_list[1:]):
+        work_s, rec_s = work.get("duration") or 0, rec.get("duration") or 0
+        if (
+            REP_WORK_S[0] <= work_s <= REP_WORK_S[1]
+            and REP_RECOVERY_S[0] <= rec_s <= REP_RECOVERY_S[1]
+            and _lap_speed(work) >= REP_SPEED_RATIO * max(_lap_speed(rec), 0.1)
+        ):
+            reps.append((work, rec))
+    return reps
+
+
 def hr_recovery(cols: dict[str, list[Any]], laps: dict[str, Any] | None) -> list[float]:
-    """HR drop 60 s after each structured interval that is followed by recovery."""
+    """HR drop 60 s after each interval rep whose recovery lasts at least 55 s."""
     ts, hr = cols.get("directTimestamp") or [], cols.get("directHeartRate") or []
     pts = [(t, h) for t, h in zip(ts, hr) if t is not None and h is not None]
-    lap_list = (laps or {}).get("lapDTOs") or []
-    if not pts or not lap_list:
+    reps = interval_reps(laps)
+    if not pts or len(reps) < MIN_REPS:
         return []
 
     def hr_at(ms: float) -> float | None:
@@ -240,13 +270,8 @@ def hr_recovery(cols: dict[str, list[Any]], laps: dict[str, Any] | None) -> list
         return h if abs(t - ms) <= 5000 else None
 
     drops = []
-    for lap, nxt in zip(lap_list, lap_list[1:]):
-        if (
-            lap.get("intensityType") in ("ACTIVE", "INTERVAL")
-            and nxt.get("intensityType") in ("RECOVERY", "REST")
-            and (nxt.get("duration") or 0) >= 55
-            and lap.get("startTimeGMT")
-        ):
+    for lap, nxt in reps:
+        if (nxt.get("duration") or 0) >= 55 and lap.get("startTimeGMT"):
             end = _gmt_ms(lap["startTimeGMT"]) + lap["duration"] * 1000
             # Peak of the last 5 s: lap boundaries and HR lag blur the exact end.
             a = max((h for t, h in pts if end - 5000 <= t <= end), default=None)
@@ -298,8 +323,10 @@ def compute_metrics(
         "te_label": s.get("trainingEffectLabel"),
         "hr_zones_s": [s.get(f"hrTimeInZone_{i}") or 0 for i in range(1, 6)],
         "body_battery_delta": s.get("differenceBodyBattery"),
-        # Free runs label every auto-lap INTERVAL; only workouts use these.
-        "structured": any(lap.get("intensityType") in STRUCTURED_LAPS for lap in lap_list),
+        # Executed as a Garmin workout (easy runs from the plan included).
+        "workout": any(lap.get("intensityType") in WORKOUT_LAPS for lap in lap_list),
+        "interval_reps": len(reps := interval_reps(laps)),
+        "intervals": len(reps) >= MIN_REPS,
         "laps": len(lap_list) or s.get("lapCount"),
     }
     if weather:

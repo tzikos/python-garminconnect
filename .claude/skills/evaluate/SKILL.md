@@ -31,7 +31,7 @@ and its aerobic-training reference to interpret the intended stimulus.
    returns derived markers per activity: `ef` (grade-adjusted speed ÷ HR
    after a 15-min warm-up; absent when < 10 min remain), `decoupling_pct`, `drift_onset_min`,
    `gct_delta_ms`, `hrr60_mean`, `pace_cv`, `elev_per_km`, `temp_c`,
-   `structured`. Use them as evidence alongside the context fields: compare
+   `intervals`/`interval_reps` (from lap paces), `workout`. Use them as evidence alongside the context fields: compare
    EF and decoupling only with past sessions of similar duration, terrain,
    steadiness and temperature (`analysis show` over a longer window gives
    the history). Read wellness (rising resting HR, HRV below its balanced

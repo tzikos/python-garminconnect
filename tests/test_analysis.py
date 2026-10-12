@@ -49,24 +49,35 @@ def test_hr_creep_shows_decoupling_and_onset():
     assert abs(m["gct_delta_ms"] - 35 / 6) < 0.1  # min 15-25 vs last 10
 
 
-def test_hr_recovery_after_intervals():
-    hr = lambda t: 175 if 600 <= t < 840 else 140
-    laps = {
-        "lapDTOs": [
-            {"intensityType": "WARMUP", "startTimeGMT": "2026-09-21T14:13:20.0", "duration": 600},
-            {"intensityType": "ACTIVE", "startTimeGMT": "2026-09-21T14:23:20.0", "duration": 240},
-            {"intensityType": "RECOVERY", "startTimeGMT": "2026-09-21T14:27:20.0", "duration": 120},
-        ]
-    }
+def _lap(start_s, duration, speed, kind="INTERVAL"):
+    from datetime import datetime, timezone
+
+    t = datetime.fromtimestamp(T0 / 1000 + start_s, timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.0")
+    return {"intensityType": kind, "startTimeGMT": t, "duration": duration, "averageSpeed": speed}
+
+
+def test_manual_lap_intervals_detected_with_hr_recovery():
+    # 10 min warm-up, then 3 x (2 min fast / 2 min jog), all labelled INTERVAL.
+    work = [(600 + i * 240, 600 + i * 240 + 120) for i in range(3)]
+    hr = lambda t: 175 if any(a <= t < b for a, b in work) else 140
+    laps = {"lapDTOs": [_lap(0, 600, 2.8)]}
+    for a, _ in work:
+        laps["lapDTOs"] += [_lap(a - 0, 120, 4.2), _lap(a + 120, 120, 2.6)]
     m = compute_metrics(SUMMARY, laps, None, _details(hr, lambda t: 3.0, lambda t: 260))
-    assert m["structured"] is True
-    assert m["hrr60"] == [35]
+    assert m["intervals"] is True and m["interval_reps"] == 3 and m["workout"] is False
+    assert m["hrr60"] == [35, 35, 35]
 
 
-def test_autolaps_are_not_structured():
-    laps = {"lapDTOs": [{"intensityType": "INTERVAL", "duration": 300}] * 6}
-    m = compute_metrics(SUMMARY, laps, None, None)
-    assert m["structured"] is False
+def test_autolaps_and_tempo_are_not_intervals():
+    # A stray 3 s lap press after the warm-up is not a recovery.
+    stray = {"lapDTOs": [_lap(0, 600, 2.8), _lap(600, 3, 1.5)]}
+    assert compute_metrics(SUMMARY, stray, None, None)["interval_reps"] == 0
+    easy = {"lapDTOs": [_lap(i * 360, 360, 2.8 + (i % 2) * 0.2) for i in range(8)]}
+    tempo = {"lapDTOs": [_lap(0, 600, 2.8, "WARMUP")] + [_lap(600 + i * 290, 290, 3.5, "ACTIVE") for i in range(4)] + [_lap(1760, 400, 2.7, "COOLDOWN")]}
+    for laps in (easy, tempo):
+        m = compute_metrics(SUMMARY, laps, None, None)
+        assert m["intervals"] is False
+    assert compute_metrics(SUMMARY, tempo, None, None)["workout"] is True
 
 
 def test_warmup_excluded_and_short_runs_get_no_ef():

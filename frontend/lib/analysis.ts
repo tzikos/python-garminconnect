@@ -78,7 +78,7 @@ export const DEFAULT_QUALIFIER: Qualifier = {
 export function disqualify(a: AnalysisActivity, q: Qualifier): string | null {
   const m = a.metrics;
   if ((m.moving_s ?? 0) / 60 < q.minMinutes) return `shorter than ${q.minMinutes} min`;
-  if (q.excludeStructured && m.structured) return "structured intervals";
+  if (q.excludeStructured && m.intervals) return "interval session";
   if (m.pace_cv != null && m.pace_cv * 100 > q.maxPaceCv) return "unsteady pace";
   if (m.elev_per_km != null && m.elev_per_km > q.maxElevPerKm) return "hilly";
   if (m.temp_c != null && m.temp_c > q.maxTempC) return "hot";

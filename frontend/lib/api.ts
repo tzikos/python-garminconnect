@@ -186,7 +186,9 @@ export type ActivityMetrics = {
   aerobic_te: number | null;
   te_label: string | null;
   hr_zones_s: number[];
-  structured: boolean;
+  workout: boolean;
+  intervals: boolean;
+  interval_reps: number;
   temp_c?: number | null;
   dew_point_c?: number | null;
   ef_basis?: "gap" | "speed";

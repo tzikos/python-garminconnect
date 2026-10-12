@@ -654,12 +654,12 @@ export default function AnalysisPage() {
 
         <ChartCard
           title="60 s heart-rate recovery after intervals" info="hrr"
-          hint="Mean HR drop one minute after each structured interval that ends in a recovery lap. A faster drop means a quicker parasympathetic rebound; ≥ 30 bpm is strong."
+          hint="Mean HR drop one minute after each interval rep (detected from lap paces, manual laps included) whose recovery lasts ≥ 55 s. A faster drop means a quicker parasympathetic rebound; ≥ 30 bpm is strong."
         >
           {v.hrrPts.length ? (
             <TrendScatter points={v.hrrPts} trend={[]} domain={domain} yFormat={(y) => `${y.toFixed(0)}`} refLines={[{ y: 30, label: "30 bpm" }]} onSelect={setSelected} height={200} />
           ) : (
-            <p className="text-sm text-muted-foreground">No structured interval sessions with recovery laps in this range.</p>
+            <p className="text-sm text-muted-foreground">No interval sessions in this range.</p>
           )}
         </ChartCard>
       </div>
@@ -728,7 +728,7 @@ export default function AnalysisPage() {
                     <td className="py-1.5 pr-3 whitespace-nowrap">
                       <span className="inline-block h-2 w-2 rounded-full mr-1.5" style={{ background: SPORT_COLORS[sportKey(a.sport)] }} />
                       {a.name}
-                      {m.structured && <span className="ml-1.5 text-muted-foreground">· intervals</span>}
+                      {m.intervals && <span className="ml-1.5 text-muted-foreground">· {m.interval_reps} reps</span>}
                     </td>
                     <td className="py-1.5 pr-3">{fmtDuration(m.duration_s)}</td>
                     <td className="py-1.5 pr-3">{m.distance_m ? fmtNum(m.distance_m / 1000, 1) : "—"}</td>

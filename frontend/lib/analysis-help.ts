@@ -101,7 +101,7 @@ export const HELP = {
     caveats: ["Slowing down lengthens ground contact by itself, so read it with the run's pace profile (click the dot to open its streams)."],
   },
   hrr: {
-    shows: "Average heart-rate drop in the 60 s after each work interval that is followed by a recovery or rest lap, per session. Only structured workouts with recovery laps appear.",
+    shows: "Average heart-rate drop in the 60 s after each work rep, per session. A session counts as intervals when at least 3 laps of 30 s–10 min are each 25%+ faster than the lap after them, so freestyle sessions with manual lap presses count as well as Garmin workouts. Continuous tempo runs and auto-lapped runs don't. Reps need a recovery of at least 55 s to be measured.",
     lookFor: [
       "Higher is better: 30–40+ bpm in a minute shows fast parasympathetic recovery; below about 20 is slow.",
       "A trend down over consecutive interval sessions, alongside low HRV or negative form, is an early sign of accumulating fatigue.",
