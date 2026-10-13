@@ -1,7 +1,7 @@
 # Custom
 your_data/
 pdm.lock
-.claude/
+.claude/settings.local.json
 
 # Virtual environments
 .venv/

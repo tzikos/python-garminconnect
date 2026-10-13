@@ -164,6 +164,97 @@ export type ConversationDetail = {
   plan_id: number | null;
 };
 
+
+// ------------------------------------------------------------ analysis
+
+export type ActivityMetrics = {
+  type: string;
+  duration_s: number | null;
+  moving_s: number | null;
+  distance_m: number | null;
+  avg_hr: number | null;
+  max_hr: number | null;
+  avg_speed: number | null;
+  avg_gap_speed: number | null;
+  elev_gain_m: number | null;
+  elev_per_km: number | null;
+  avg_power: number | null;
+  cadence: number | null;
+  gct_ms: number | null;
+  vo2max: number | null;
+  load: number | null;
+  aerobic_te: number | null;
+  te_label: string | null;
+  hr_zones_s: number[];
+  workout: boolean;
+  intervals: boolean;
+  interval_reps: number;
+  temp_c?: number | null;
+  dew_point_c?: number | null;
+  ef_basis?: "gap" | "speed";
+  ef?: number | null;
+  ef_power?: number | null;
+  pace_cv?: number;
+  decoupling_pct?: number;
+  decoupling_power_pct?: number;
+  hr_drift_bpm?: number;
+  speed_change_pct?: number | null;
+  drift_checked_minutes?: number;
+  drift_onset_min?: number | null;
+  drift_onset_km?: number | null;
+  gct_delta_ms?: number;
+  perf_condition_first?: number;
+  perf_condition_last?: number;
+  hrr60_mean?: number;
+  hrr60_n?: number;
+};
+
+export type AnalysisActivity = {
+  activity_id: number;
+  date: string;
+  start_local: string;
+  sport: string;
+  name: string;
+  has_streams: boolean;
+  metrics: ActivityMetrics;
+};
+
+export type WellnessDay = {
+  date: string;
+  resting_hr: number | null;
+  resting_hr_7d: number | null;
+  hrv_night: number | null;
+  hrv_week: number | null;
+  hrv_status: string | null;
+  hrv_baseline_low: number | null;
+  hrv_baseline_high: number | null;
+  sleep_score: number | null;
+  sleep_h: number | null;
+  stress_avg: number | null;
+  bb_wake: number | null;
+};
+
+export type StreamPoint = {
+  minute: number;
+  hr?: number | null;
+  speed?: number | null;
+  gap?: number | null;
+  power?: number | null;
+  gct?: number | null;
+  cadence?: number | null;
+  dist?: number;
+  elev?: number;
+};
+
+export type ActivityStreams = {
+  activity_id: number;
+  name: string;
+  date: string;
+  sport: string;
+  metrics: ActivityMetrics;
+  points: StreamPoint[];
+};
+
 export const api = {
   profile: {
     get: () => request<Profile>("/api/profile"),
@@ -263,5 +354,11 @@ export const api = {
     primitives: () =>
       request<{ name: string; params: string[] }[]>("/api/settings/primitives"),
     sports: () => request<SportsCatalog>("/api/settings/sports"),
+  },
+  analysis: {
+    activities: () => request<AnalysisActivity[]>("/api/analysis/activities"),
+    wellness: () => request<WellnessDay[]>("/api/analysis/wellness"),
+    streams: (id: number) =>
+      request<ActivityStreams>(`/api/analysis/activities/${id}/streams`),
   },
 };

@@ -15,7 +15,16 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any
 
-from sqlalchemy import JSON, Date, DateTime, ForeignKey, String, Text, func
+from sqlalchemy import (
+    JSON,
+    Date,
+    DateTime,
+    ForeignKey,
+    LargeBinary,
+    String,
+    Text,
+    func,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -86,6 +95,7 @@ class Plan(Base):
     workouts: Mapped[list[ScheduledWorkout]] = relationship(
         back_populates="plan", cascade="all, delete-orphan"
     )
+    reviews: Mapped[list[ActivityReview]] = relationship(cascade="all, delete-orphan")
 
 
 class ScheduledWorkout(Base):
@@ -146,3 +156,55 @@ class IntakeConversation(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now()
     )
+
+
+class ActivityReview(Base):
+    """Cached Garmin evidence and a durable, plan-scoped coaching evaluation.
+
+    Activity IDs survive plan edits. Planned workout context is a snapshot,
+    not a foreign key to a row that a later import might replace.
+    """
+
+    __tablename__ = "activity_review"
+
+    plan_id: Mapped[int] = mapped_column(ForeignKey("plan.id"), primary_key=True)
+    activity_id: Mapped[int] = mapped_column(primary_key=True)
+    activity_date: Mapped[date] = mapped_column(Date)
+    evidence: Mapped[dict[str, Any]] = mapped_column(JSON)
+    evaluation: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    evaluated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class Activity(Base):
+    """Every Garmin activity with its full recording, independent of plans.
+
+    `details` is the zlib-compressed `/details` response (all sample streams
+    at full resolution). `metrics` is derived from it by coach.analysis and
+    can be rebuilt any time with `coach analysis recompute`.
+    """
+
+    __tablename__ = "activity"
+
+    activity_id: Mapped[int] = mapped_column(primary_key=True)
+    date: Mapped[date] = mapped_column(Date, index=True)
+    sport: Mapped[str] = mapped_column(String(32), index=True)
+    name: Mapped[str] = mapped_column(String(200), default="")
+    summary: Mapped[dict[str, Any]] = mapped_column(JSON)
+    laps: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    weather: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    details: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    metrics: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    metrics_version: Mapped[int] = mapped_column(default=0)
+    errors: Mapped[list[str]] = mapped_column(JSON, default=list)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class WellnessDay(Base):
+    """One day of recovery signals (resting HR, HRV, sleep, stress, body battery)."""
+
+    __tablename__ = "wellness_day"
+
+    date: Mapped[date] = mapped_column(Date, primary_key=True)
+    metrics: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    raw: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

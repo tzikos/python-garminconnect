@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(uv run coach profile:*)",
+      "Bash(uv run coach plan list:*)",
+      "Bash(uv run coach plan show:*)",
+      "Bash(uv run coach plan export:*)",
+      "Bash(uv run coach plan import:*)",
+      "Bash(uv run coach sync push --plan-id:* --dry-run)",
+      "Bash(uv run coach init:*)",
+      "WebSearch",
+      "WebFetch(domain:en.wikipedia.org)"
+    ]
+  }
+}
